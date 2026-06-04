@@ -363,6 +363,7 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
     <input id="login-email" type="email" placeholder="Email" autocomplete="username">
     <input id="login-pass" type="password" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()">Ingresar</button>
+    <div style="text-align:center;margin-top:12px"><a href="#" onclick="doResetPassword();return false" style="font-size:12px;color:var(--purple2);text-decoration:none">¿Olvidaste tu contraseña?</a></div>
     <div class="login-foot">
       <span id="login-status">Conectando…</span>
       <a href="#" onclick="openAdmin();return false">⚙ Admin</a>
@@ -2166,6 +2167,31 @@ async function doLogin(){
 }
 
 function doLogout(){ if(window.firebase&&firebase.auth) firebase.auth().signOut(); }
+
+async function doResetPassword(){
+  clearLoginError();
+  const email=document.getElementById("login-email").value.trim();
+  if(!email){showLoginError("Escribí tu email arriba y volvé a tocar el link.");return;}
+  if(!window.firebase||!firebase.auth){showLoginError("Conectando con el servidor, probá de nuevo en unos segundos.");return;}
+  setLoginStatus("Enviando email de recuperación…");
+  try{
+    await firebase.auth().sendPasswordResetEmail(email);
+    const el=document.getElementById("login-error");
+    if(el){el.textContent="✅ Te enviamos un email a "+email+" para restablecer tu contraseña. Revisá tu bandeja (y spam).";el.className="login-error show";el.style.color="var(--teal2)";el.style.borderColor="rgba(46,196,160,.3)";el.style.background="rgba(46,196,160,.12)";}
+    setLoginStatus("Listo. Ingresá tus datos.");
+  }catch(e){
+    const m={
+      "auth/user-not-found":"No existe una cuenta con ese email.",
+      "auth/invalid-email":"Email inválido.",
+      "auth/too-many-requests":"Demasiados intentos. Esperá un momento."
+    }[e.code]||e.message;
+    // restaurar estilo de error rojo
+    const el=document.getElementById("login-error");
+    if(el){el.style.color="";el.style.borderColor="";el.style.background="";}
+    showLoginError(m);
+    setLoginStatus("Listo. Ingresá tus datos.");
+  }
+}
 
 async function onAuthChanged(user){
   if(!user){
