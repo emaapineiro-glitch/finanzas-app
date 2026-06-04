@@ -331,9 +331,43 @@ td.cn .row-label{display:flex;align-items:center;gap:2px}
 .toast{position:fixed;bottom:22px;right:20px;background:var(--bg4);border:1px solid var(--border2);border-radius:9px;padding:9px 16px;font-size:12px;color:var(--text1);z-index:999;display:flex;align-items:center;gap:7px;box-shadow:0 8px 28px rgba(0,0,0,0.5);transform:translateY(70px);opacity:0;transition:all .28s;pointer-events:none}
 .toast.show{transform:translateY(0);opacity:1}
 .toast.tok{border-color:rgba(46,196,160,.5)}.toast.tundo{border-color:rgba(124,111,239,.5)}
+
+/* LOGIN OVERLAY */
+#login-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#0f0f1a,#1a1530);z-index:2000;display:none;align-items:center;justify-content:center;padding:20px}
+body.logged-out #login-overlay{display:flex}
+body.logged-out #app,body.logged-out .voice-fab{display:none!important}
+.login-card{background:var(--bg2);border:1px solid var(--border2);border-radius:18px;padding:32px 28px;width:100%;max-width:360px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.login-logo{width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,var(--purple),var(--teal));display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 16px}
+.login-card h1{font-size:20px;color:var(--purple3);margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--text3);margin-bottom:20px}
+.login-card input{width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid var(--border2);background:var(--bg4);color:var(--text1);font-size:14px;outline:none}
+.login-card input:focus{border-color:var(--purple)}
+.login-btn{width:100%;padding:11px;border-radius:10px;border:none;background:var(--purple);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
+.login-btn:hover{background:var(--purple2)}
+.login-error{background:rgba(232,93,74,.12);border:1px solid rgba(232,93,74,.3);color:var(--coral2);border-radius:8px;padding:8px;font-size:12px;margin-bottom:12px;display:none}
+.login-error.show{display:block}
+.login-foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;font-size:11px;color:var(--text3)}
+.login-foot a{color:var(--text3);text-decoration:none}
+.login-foot a:hover{color:var(--purple3)}
 </style>
 </head>
-<body>
+<body class="logged-out">
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-logo">💰</div>
+    <h1>Finanzas Personales</h1>
+    <p class="login-sub">Ingresá con tu cuenta</p>
+    <div id="login-error" class="login-error"></div>
+    <input id="login-email" type="email" placeholder="Email" autocomplete="username">
+    <input id="login-pass" type="password" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">Ingresar</button>
+    <div class="login-foot">
+      <span id="login-status">Conectando…</span>
+      <a href="#" onclick="openAdmin();return false">⚙ Admin</a>
+    </div>
+  </div>
+</div>
 <div id="app">
   <!-- HEADER -->
   <div class="header">
@@ -369,8 +403,7 @@ td.cn .row-label{display:flex;align-items:center;gap:2px}
     </div>
     <div class="tb-right">
       <div class="tb-div"></div>
-      <button class="tb-btn" id="fb-btn" onclick="openFbModal()" title="Sincronización Firebase" style="color:var(--amber2)">🔥 Firebase</button>
-      <div class="tb-div"></div>
+      <button class="tb-btn" id="fb-btn" onclick="openFbModal()" title="Sincronización Firebase" style="color:var(--amber2);display:none">🔥 Firebase</button>
       <button class="tb-btn ex" onclick="exportData()">⬇ Exportar JSON</button>
       <button class="tb-btn" onclick="document.getElementById('imp-file').click()">⬆ Importar JSON</button>
       <input type="file" id="imp-file" accept=".json" style="display:none" onchange="importData(event)">
@@ -463,6 +496,32 @@ td.cn .row-label{display:flex;align-items:center;gap:2px}
     </div>
   </div>
 </div>
+<!-- ADMIN MODAL -->
+<div class="vmodal-bg" id="admin-modal-bg" onclick="if(event.target===this)closeAdmin()">
+  <div class="vmodal">
+    <div class="vmodal-handle"></div>
+    <div class="vmodal-title">⚙ Panel de administración</div>
+    <div id="admin-gate">
+      <div class="vmodal-sub">Ingresá la contraseña maestra para administrar usuarios.</div>
+      <input class="apikey-inp" id="admin-master" type="password" placeholder="Contraseña maestra" style="width:100%;margin-bottom:10px" onkeydown="if(event.key==='Enter')unlockAdmin()">
+      <div class="vbtn-row"><button class="vbtn primary" onclick="unlockAdmin()">Desbloquear</button><button class="vbtn ghost" onclick="closeAdmin()">Cerrar</button></div>
+      <div id="admin-gate-msg" style="margin-top:8px;font-size:12px;color:var(--coral2)"></div>
+    </div>
+    <div id="admin-panel" style="display:none">
+      <div class="vmodal-sub" style="color:var(--purple3);font-weight:600">➕ Crear nuevo usuario</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <input class="apikey-inp" id="nu-name" placeholder="Nombre" style="width:100%">
+        <input class="apikey-inp" id="nu-email" placeholder="Email" style="width:100%">
+        <input class="apikey-inp" id="nu-pass" placeholder="Contraseña inicial (mín 6)" style="width:100%">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)"><input type="checkbox" id="nu-alq"> Habilitar pestaña Alquileres</label>
+      </div>
+      <div class="vbtn-row" style="margin-bottom:10px"><button class="vbtn primary" onclick="adminCreateUser()">+ Crear usuario</button><button class="vbtn ghost" onclick="closeAdmin()">Cerrar</button></div>
+      <div id="admin-create-msg" style="font-size:12px;margin-bottom:14px;min-height:16px"></div>
+      <div class="vmodal-sub" style="color:var(--purple3);font-weight:600">👥 Usuarios</div>
+      <div id="admin-user-list" style="font-size:12px"></div>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -488,6 +547,8 @@ function makeYD(){
 let state={currentYear:2026,fx:{USD:1435,USDT:1432},years:{"2026":makeYD()},tabOrder:["alq","mov","sav","biz","res"]};
 let hist=[],hIdx=-1,editingCell=null,curTab="alq",activeMonth=TODAY_MONTH,activeBiz=null;
 let saveTimer=null,toastTimer=null;
+let currentUid=null;
+function lsKey(){return currentUid?("fp_app_"+currentUid):"fp_app";}
 
 /* ── HISTORY ── */
 function snap(label){const s={label,data:JSON.stringify(state)};hist=hist.slice(0,hIdx+1);hist.push(s);if(hist.length>MAX_HIST)hist.shift();hIdx=hist.length-1;updHistUI();}
@@ -513,7 +574,7 @@ function saveNow(){
   if(txt) txt.textContent="Guardando…";
   try{
     const json=JSON.stringify(state);
-    localStorage.setItem("fp_app",json);
+    localStorage.setItem(lsKey(),json);
     if(dot){dot.className="sdot";dot.style.background="";}
     if(txt) txt.textContent="✓ Guardado · "+new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
   }catch(e){
@@ -851,7 +912,7 @@ function importData(e){
 }
 function loadLS(){
   try{
-    const raw=localStorage.getItem("fp_app");
+    const raw=localStorage.getItem(lsKey());
     if(!raw) return false;
     const saved=JSON.parse(raw);
     if(saved.years)       state.years=saved.years;
@@ -1263,7 +1324,10 @@ function render(){
   });
   // Render tabs dynamically with drag-and-drop reordering
   const TAB_DEFS={alq:{label:"🏢 Alquileres"},mov:{label:"💳 Movimientos"},sav:{label:"🏦 Ahorros"},biz:{label:"💼 Negocios"},res:{label:"📊 Resumen"}};
-  const tabOrder=state.tabOrder||["alq","mov","sav","biz","res"];
+  const alqOn=state.alqEnabled!==false; // undefined o true => visible; solo false la oculta
+  let tabOrder=(state.tabOrder||["alq","mov","sav","biz","res"]).filter(t=>TAB_DEFS[t]&&(t!=="alq"||alqOn));
+  if(alqOn&&!tabOrder.includes("alq")) tabOrder.unshift("alq");
+  if(!tabOrder.includes(curTab)) curTab=tabOrder[0]||"mov";
   document.querySelector(".tabs").innerHTML=tabOrder.map(t=>`<button class="tab-btn${curTab===t?" active":""}" data-tab="${t}" draggable="true" ondragstart="tabDragStart(event,'${t}')" ondragend="tabDragEnd(event)" ondragover="tabDragOver(event,'${t}')" ondrop="tabDrop(event,'${t}')" onclick="switchTab('${t}')">${TAB_DEFS[t].label}</button>`).join("");
   renderMonthNav();
 
@@ -1438,8 +1502,8 @@ function render(){
         <table><thead><tr><th class="cn" style="min-width:175px">Movimiento</th>${TH}<th>Total</th><th></th></tr></thead>
         <tbody>
           <!-- FILA FIJA: Mi parte alquileres -->
-          <tr class="rb"><td class="cn"><span class="pill" style="background:rgba(74,158,255,.15);color:var(--blue2);border:1px solid rgba(74,158,255,.3)">alq</span><strong style="color:var(--blue2)">Mi parte alquileres (${pct}%)</strong></td>
-          ${miParteCells}<td class="tc ${toc(sumMio,"tb2")}">${fa(sumMio)}</td><td></td></tr>
+          ${alqOn?`<tr class="rb"><td class="cn"><span class="pill" style="background:rgba(74,158,255,.15);color:var(--blue2);border:1px solid rgba(74,158,255,.3)">alq</span><strong style="color:var(--blue2)">Mi parte alquileres (${pct}%)</strong></td>
+          ${miParteCells}<td class="tc ${toc(sumMio,"tb2")}">${fa(sumMio)}</td><td></td></tr>`:""}
           <!-- FILA: Mi parte negocios (si hay alguno) -->
           ${(yd.negocios||[]).length>0?`<tr class="rg"><td class="cn"><span class="pill" style="background:rgba(74,222,128,.12);color:var(--green);border:1px solid rgba(74,222,128,.3)">neg</span><strong style="color:var(--green)">Mi parte negocios</strong></td>
           ${negociosMiParte.map((v,m)=>staticCell(v,m)).join("")}
@@ -1560,10 +1624,12 @@ function render(){
     const cumFinal=cumSav[11];
     const negTot=negociosMiParte.reduce((a,b)=>a+b,0);
     const rows=[
-      {label:"Ingresos alquileres",vals:alqMes,cls:"rt",tc:"tt"},
-      {label:"Gastos alquileres",vals:gasMes,cls:"rc",tc:"tco"},
-      {label:"Neto alquileres",vals:neto,cls:"rb",tc:"tb2",bold:true},
-      {label:`Mi parte alquileres (${pct}%)`,vals:netoMio,cls:"rp",tc:"tpu",bold:true},
+      ...(alqOn?[
+        {label:"Ingresos alquileres",vals:alqMes,cls:"rt",tc:"tt"},
+        {label:"Gastos alquileres",vals:gasMes,cls:"rc",tc:"tco"},
+        {label:"Neto alquileres",vals:neto,cls:"rb",tc:"tb2",bold:true},
+        {label:`Mi parte alquileres (${pct}%)`,vals:netoMio,cls:"rp",tc:"tpu",bold:true},
+      ]:[]),
       ...((yd.negocios||[]).length>0?[{label:"Mi parte negocios",vals:negociosMiParte,cls:"rg",tc:"tg",bold:true}]:[]),
       {label:"Total movimientos",vals:movMes,cls:"rt",tc:"tt"},
       {label:"Acumulado movimientos",vals:acum,cls:"rb",tc:"tb2",bold:true},
@@ -1574,12 +1640,11 @@ function render(){
     }).join("");
     document.getElementById("tab-res").innerHTML=`
       <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(155px,1fr))">
+        ${alqOn?`
         <div class="stat-card sc-t"><div class="sl">🏢 Ingresos alq.</div><div class="sv">${fa(sumAlq)}</div></div>
         <div class="stat-card sc-c"><div class="sl">🧾 Gastos alq.</div><div class="sv">${fa(sumGas)}</div></div>
         <div class="stat-card ${sumNeto>=0?"sc-t":"sc-c"}"><div class="sl">⚖️ Neto alq.</div><div class="sv">${fa(sumNeto)}</div></div>
-        <div class="stat-card sc-b"><div class="sl">👤 Mi parte</div><div class="sv">${fa(sumMio)}</div></div>
-        <div class="stat-card sc-p"><div class="sl">💳 Total mov.</div><div class="sv">${fa(movTot)}</div></div>
-        <div class="stat-card sc-b"><div class="sl">👤 Mi parte alq.</div><div class="sv">${fa(sumMio)}</div></div>
+        <div class="stat-card sc-b"><div class="sl">👤 Mi parte alq.</div><div class="sv">${fa(sumMio)}</div></div>`:""}
         ${(yd.negocios||[]).length>0?`<div class="stat-card sc-g"><div class="sl">💼 Mi parte negocios</div><div class="sv">${fa(negTot)}</div><div class="ss">${(yd.negocios||[]).length} negocio${(yd.negocios||[]).length!==1?"s":""}</div></div>`:""}
         <div class="stat-card sc-p"><div class="sl">💳 Total mov.</div><div class="sv">${fa(movTot)}</div></div>
         <div class="stat-card ${cumFinal>=0?"sc-g":"sc-c"}"><div class="sl">🏦 Ahorro acumulado</div><div class="sv">${fa(cumFinal)}</div></div>
@@ -2036,6 +2101,252 @@ if(state.currentYear===TODAY_YEAR) activeMonth=TODAY_MONTH;
 render();
 scrollToActive();
 fetchFX();
+</script>
+
+<script>
+/* ══════════════════════════════════════════════
+   AUTENTICACIÓN + MULTIUSUARIO (Firebase Auth + RTDB)
+══════════════════════════════════════════════ */
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyDo2fwISKWaMvshslnrnNVlSt4icClVcIo",
+  authDomain:"finanzas-ff753.firebaseapp.com",
+  databaseURL:"https://finanzas-ff753-default-rtdb.firebaseio.com",
+  projectId:"finanzas-ff753",
+  storageBucket:"finanzas-ff753.firebasestorage.app",
+  messagingSenderId:"208399167064",
+  appId:"1:208399167064:web:ae94d5df88d7b99951e42d"
+};
+/* ⚠️⚠️ CAMBIÁ ESTA CONTRASEÑA MAESTRA DE ADMIN ⚠️⚠️ */
+const ADMIN_MASTER="FinanzasAdmin2026";
+
+let authDb=null, authUserRef=null, authListener=null, cloudSyncing=false, cloudPushTimer=null, authStarted=false;
+
+function authLoadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`)){res();return;}const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+
+async function authInit(){
+  if(authStarted)return; authStarted=true;
+  try{
+    await authLoadScript("https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js");
+    await authLoadScript("https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js");
+    await authLoadScript("https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js");
+    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    authDb=firebase.database();
+    setLoginStatus("Listo. Ingresá tus datos.");
+    firebase.auth().onAuthStateChanged(onAuthChanged);
+  }catch(e){
+    setLoginStatus("⚠ No se pudo conectar con el servidor.");
+    console.error("authInit",e);
+  }
+}
+
+function setLoginStatus(t){const el=document.getElementById("login-status");if(el)el.textContent=t;}
+function showLoginError(msg){const el=document.getElementById("login-error");if(el){el.textContent=msg;el.className="login-error show";}}
+function clearLoginError(){const el=document.getElementById("login-error");if(el)el.className="login-error";}
+
+async function doLogin(){
+  clearLoginError();
+  const email=document.getElementById("login-email").value.trim();
+  const pass=document.getElementById("login-pass").value;
+  if(!email||!pass){showLoginError("Completá email y contraseña.");return;}
+  setLoginStatus("Ingresando…");
+  try{
+    await firebase.auth().signInWithEmailAndPassword(email,pass);
+  }catch(e){
+    const m={
+      "auth/invalid-credential":"Email o contraseña incorrectos.",
+      "auth/wrong-password":"Contraseña incorrecta.",
+      "auth/user-not-found":"No existe una cuenta con ese email.",
+      "auth/invalid-email":"Email inválido.",
+      "auth/too-many-requests":"Demasiados intentos. Esperá un momento."
+    }[e.code]||e.message;
+    showLoginError(m);
+    setLoginStatus("Listo. Ingresá tus datos.");
+  }
+}
+
+function doLogout(){ if(window.firebase&&firebase.auth) firebase.auth().signOut(); }
+
+async function onAuthChanged(user){
+  if(!user){
+    currentUid=null;
+    if(authUserRef&&authListener){try{authUserRef.off("value",authListener);}catch(e){}}
+    authUserRef=null;authListener=null;
+    document.body.classList.add("logged-out");
+    setLoginStatus("Listo. Ingresá tus datos.");
+    return;
+  }
+  // chequear si la cuenta está deshabilitada
+  try{
+    const regSnap=await authDb.ref("userRegistry/"+user.uid).once("value");
+    const reg=regSnap.val();
+    if(reg&&reg.disabled){
+      await firebase.auth().signOut();
+      showLoginError("Tu cuenta está deshabilitada. Contactá al administrador.");
+      return;
+    }
+  }catch(e){/* si no se puede leer registro, continuar */}
+  currentUid=user.uid;
+  await cloudLoad(user.uid);
+  document.body.classList.remove("logged-out");
+  renderAuthToolbar(user);
+  render();
+  cloudListen(user.uid);
+}
+
+function applyCloudState(parsed){
+  if(parsed.years) state.years=parsed.years;
+  if(parsed.currentYear!==undefined) state.currentYear=parsed.currentYear;
+  if(parsed.fx) state.fx={...state.fx,...parsed.fx};
+  if(parsed.tabOrder) state.tabOrder=parsed.tabOrder;
+  state.alqEnabled=parsed.alqEnabled; // undefined(=visible) o false(oculta)
+  state._ts=parsed._ts||0;
+}
+
+async function cloudLoad(uid){
+  try{
+    const snap=await authDb.ref("users/"+uid+"/state").once("value");
+    const val=snap.val();
+    if(val){
+      applyCloudState(typeof val==="string"?JSON.parse(val):val);
+      try{localStorage.setItem(lsKey(),JSON.stringify(state));}catch(e){}
+    }else{
+      // sin datos en la nube: usar cache local o template nuevo
+      const raw=localStorage.getItem(lsKey());
+      applyCloudState(raw?JSON.parse(raw):makeUserTemplate());
+      cloudPush();
+    }
+  }catch(e){console.warn("cloudLoad",e);}
+}
+
+function cloudListen(uid){
+  if(authUserRef&&authListener){try{authUserRef.off("value",authListener);}catch(e){}}
+  authUserRef=authDb.ref("users/"+uid+"/state");
+  authListener=authUserRef.on("value",snap=>{
+    if(cloudSyncing)return;
+    const val=snap.val();if(!val)return;
+    try{
+      const parsed=typeof val==="string"?JSON.parse(val):val;
+      if((parsed._ts||0)<=(state._ts||0))return;
+      cloudSyncing=true;
+      applyCloudState(parsed);
+      try{localStorage.setItem(lsKey(),JSON.stringify(state));}catch(e){}
+      render();
+      cloudSyncing=false;
+      toast("🔄 Sincronizado desde otro dispositivo","tok");
+    }catch(e){cloudSyncing=false;}
+  });
+}
+
+function cloudPush(){
+  if(!currentUid||!authDb)return;
+  cloudSyncing=true;
+  state._ts=Date.now();
+  authDb.ref("users/"+currentUid+"/state").set(JSON.stringify(state))
+    .then(()=>{cloudSyncing=false;}).catch(()=>{cloudSyncing=false;});
+}
+function scheduleCloudPush(){clearTimeout(cloudPushTimer);cloudPushTimer=setTimeout(cloudPush,800);}
+
+function makeUserTemplate(){
+  return {currentYear:TODAY_YEAR,fx:{USD:state.fx.USD,USDT:state.fx.USDT},years:{[String(TODAY_YEAR)]:makeYD()},tabOrder:["mov","sav","biz","res"],alqEnabled:false,_ts:Date.now()};
+}
+
+function renderAuthToolbar(user){
+  let el=document.getElementById("auth-toolbar");
+  if(!el){
+    const tr=document.querySelector(".tb-right");
+    if(tr){el=document.createElement("div");el.id="auth-toolbar";el.style.cssText="display:flex;align-items:center;gap:6px;margin-left:auto";tr.appendChild(el);}
+  }
+  if(el) el.innerHTML=`<span style="font-size:11px;color:var(--text3)">👤 ${user.email}</span><button class="tb-btn" onclick="doLogout()" style="color:var(--coral2)">Salir</button>`;
+}
+
+/* ═══ ADMIN ═══ */
+function openAdmin(){
+  document.getElementById("admin-modal-bg").classList.add("open");
+  document.getElementById("admin-gate").style.display="";
+  document.getElementById("admin-panel").style.display="none";
+  document.getElementById("admin-master").value="";
+  document.getElementById("admin-gate-msg").textContent="";
+}
+function closeAdmin(){document.getElementById("admin-modal-bg").classList.remove("open");}
+function unlockAdmin(){
+  const v=document.getElementById("admin-master").value;
+  if(v===ADMIN_MASTER){
+    document.getElementById("admin-gate").style.display="none";
+    document.getElementById("admin-panel").style.display="";
+    adminListUsers();
+  }else{
+    document.getElementById("admin-gate-msg").textContent="Contraseña incorrecta.";
+  }
+}
+async function adminCreateUser(){
+  const name=document.getElementById("nu-name").value.trim();
+  const email=document.getElementById("nu-email").value.trim();
+  const pass=document.getElementById("nu-pass").value;
+  const alq=document.getElementById("nu-alq").checked;
+  const msg=document.getElementById("admin-create-msg");
+  if(!email||!pass){msg.style.color="var(--coral2)";msg.textContent="Completá email y contraseña.";return;}
+  if(pass.length<6){msg.style.color="var(--coral2)";msg.textContent="La contraseña debe tener al menos 6 caracteres.";return;}
+  msg.style.color="var(--text3)";msg.textContent="Creando usuario…";
+  let secApp=null;
+  try{
+    secApp=firebase.initializeApp(FIREBASE_CONFIG,"admin-worker-"+Date.now());
+    const cred=await secApp.auth().createUserWithEmailAndPassword(email,pass);
+    const uid=cred.user.uid;
+    const tmpl=makeUserTemplate();
+    if(alq){tmpl.tabOrder=["alq","mov","sav","biz","res"];tmpl.alqEnabled=true;}
+    await secApp.database().ref("userRegistry/"+uid).set({email,name:name||email,disabled:false,createdAt:Date.now(),alqEnabled:alq});
+    await secApp.database().ref("users/"+uid+"/state").set(JSON.stringify(tmpl));
+    await secApp.auth().signOut();
+    msg.style.color="var(--teal2)";msg.textContent="✅ Usuario creado: "+email;
+    document.getElementById("nu-name").value="";document.getElementById("nu-email").value="";document.getElementById("nu-pass").value="";document.getElementById("nu-alq").checked=false;
+    adminListUsers();
+  }catch(e){
+    const m={"auth/email-already-in-use":"Ya existe una cuenta con ese email.","auth/invalid-email":"Email inválido.","auth/weak-password":"Contraseña demasiado débil."}[e.code]||e.message;
+    msg.style.color="var(--coral2)";msg.textContent="Error: "+m;
+  }finally{
+    if(secApp){try{await secApp.delete();}catch(e){}}
+  }
+}
+async function adminListUsers(){
+  const cont=document.getElementById("admin-user-list");
+  cont.innerHTML="Cargando…";
+  try{
+    const snap=await authDb.ref("userRegistry").once("value");
+    const reg=snap.val()||{};
+    const entries=Object.entries(reg);
+    if(entries.length===0){cont.innerHTML="<div style='color:var(--text3)'>No hay usuarios creados todavía.</div>";return;}
+    cont.innerHTML=entries.map(([uid,u])=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px">
+          <div style="color:var(--text1);font-weight:600">${u.name||u.email}</div>
+          <div style="color:var(--text3);font-size:11px">${u.email||""} ${u.disabled?"· <span style='color:var(--coral2)'>deshabilitado</span>":""} ${u.alqEnabled?"· 🏢 alq":""}</div>
+        </div>
+        <button class="tb-btn" onclick="adminToggleUser('${uid}',${!u.disabled})">${u.disabled?"Habilitar":"Deshabilitar"}</button>
+        <button class="tb-btn" style="color:var(--coral2)" onclick="adminDeleteUserData('${uid}','${(u.email||"").replace(/'/g,"")}')">Borrar datos</button>
+      </div>`).join("");
+  }catch(e){cont.innerHTML="<div style='color:var(--coral2)'>Error al listar: "+e.message+"</div>";}
+}
+async function adminToggleUser(uid,disabled){
+  try{await authDb.ref("userRegistry/"+uid+"/disabled").set(disabled);adminListUsers();}
+  catch(e){alert("Error: "+e.message);}
+}
+async function adminDeleteUserData(uid,email){
+  if(!confirm("¿Borrar TODOS los datos de "+email+"?\n\nLa cuenta de login seguirá existiendo (para eliminarla por completo, hacelo desde la consola de Firebase → Authentication).\n\nEsta acción no se puede deshacer."))return;
+  try{
+    await authDb.ref("users/"+uid).remove();
+    await authDb.ref("userRegistry/"+uid).remove();
+    adminListUsers();
+  }catch(e){alert("Error: "+e.message);}
+}
+
+/* enganchar push a la nube en cada guardado */
+(function(){
+  const prev=saveNow;
+  saveNow=function(){prev.apply(this,arguments);scheduleCloudPush();};
+})();
+
+document.addEventListener("DOMContentLoaded",authInit);
+if(document.readyState!=="loading") authInit();
 </script>
 </body>
 </html>
