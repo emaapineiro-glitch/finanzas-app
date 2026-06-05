@@ -48,7 +48,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .year-ctrl button:hover{color:var(--purple3)}
 .year-ctrl span{font-size:14px;font-weight:700;color:var(--text1);min-width:40px;text-align:center}
 .fx-box{display:flex;align-items:center;gap:7px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:6px 10px;flex-wrap:wrap}
-.fx-item{display:flex;align-items:center;gap:4px;font-size:11px}
+.fx-item{display:flex;align-items:center;gap:4px;font-size:11px;flex-wrap:wrap}
+.fx-cv{width:100%;text-align:right;font-size:9px;color:var(--text3);font-weight:600;letter-spacing:.2px}
+.fx-cv .c{color:var(--teal2)}.fx-cv .v{color:var(--amber2)}
 .fx-label{color:var(--text3);font-weight:600}
 .fx-input{width:78px;background:var(--bg4);border:1px solid var(--border2);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--amber2);font-weight:700;outline:none;text-align:right}
 .fx-input:focus{border-color:var(--purple)}
@@ -546,9 +548,9 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 2px rgba(124,111,239,.1
         <button onclick="changeYear(1)" title="Año siguiente">›</button>
       </div>
       <div class="fx-box">
-        <div class="fx-item"><span class="fx-label">USD/ARS</span><input class="fx-input" id="fx-usd" type="number" value="1435" oninput="fxChanged()"></div>
+        <div class="fx-item"><span class="fx-label">USD/ARS</span><input class="fx-input" id="fx-usd" type="number" value="1435" oninput="fxChanged()"><span class="fx-cv" id="fx-usd-cv"></span></div>
         <div class="fx-div"></div>
-        <div class="fx-item"><span class="fx-label">USDT/ARS</span><input class="fx-input" id="fx-usdt" type="number" value="1432" oninput="fxChanged()"></div>
+        <div class="fx-item"><span class="fx-label">USDT/ARS</span><input class="fx-input" id="fx-usdt" type="number" value="1432" oninput="fxChanged()"><span class="fx-cv" id="fx-usdt-cv"></span></div>
         <div class="fx-div"></div>
         <div class="fx-status"><div class="dot" id="fx-dot"></div><span id="fx-status-txt">Manual</span></div>
         <button class="fx-btn" onclick="fetchFX()">↻ Live</button>
@@ -1187,6 +1189,10 @@ async function fetchFX(){
     const cripto=data.find(d=>d.casa==="cripto"||d.nombre?.toLowerCase().includes("cripto"));
     if(blue){state.fx.USD=blue.venta||blue.compra||1435;}
     if(cripto){state.fx.USDT=cripto.venta||cripto.compra||1432;}
+    const rnd=n=>Math.round(Number(n)||0).toLocaleString("es-AR");
+    const cvHtml=(o)=>`<span class="c">C ${rnd(o.compra)}</span> · <span class="v">V ${rnd(o.venta)}</span>`;
+    if(blue){const el=document.getElementById("fx-usd-cv");if(el)el.innerHTML=cvHtml(blue);}
+    if(cripto){const el=document.getElementById("fx-usdt-cv");if(el)el.innerHTML=cvHtml(cripto);}
     dot.className="dot live";txt.textContent="En vivo · "+new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     document.getElementById("fx-usd").value=Math.round(state.fx.USD);
     document.getElementById("fx-usdt").value=Math.round(state.fx.USDT);
