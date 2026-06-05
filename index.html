@@ -1016,9 +1016,9 @@ function startQuickAdd(el,id,m){
     if(done)return;done=true;
     const v=parseFloat(inp.value);
     if(!isNaN(v)&&v!==0){
-      const existing=getRowTotal(r,m);          // ARS actual de la celda
-      let amt=v;
-      if(v>0&&existing<0) amt=-v;                // acompañar la dirección (si la celda es gasto, suma gasto)
+      let amt;
+      if(r.tipo){ amt=signByTipo(r,v); }         // fila con tipo: gasto(-)/ingreso(+)
+      else { amt=v; const existing=getRowTotal(r,m); if(v>0&&existing<0) amt=-v; } // si no, acompaña la dirección
       addTx(id,m,amt,cur,"Suma rápida",new Date().toISOString());
       snap("Sumar monto");
     }
@@ -1062,14 +1062,15 @@ function setVal(id,m,type,val){
     if(!r) return;
     if(!r.txs) r.txs=Array(12).fill(null).map(()=>[]);
     const cur=r.currency?.[m]||"ARS";
+    const sv=signByTipo(r,val); // aplica gasto(-)/ingreso(+) según el tipo de la fila
     if(val===0){ r.txs[m]=[]; }
     else {
       // Replace with a single manual entry
-      r.txs[m]=[{id:Date.now(),monto:val,currency:cur,nota:"Manual",fecha:new Date().toISOString()}];
+      r.txs[m]=[{id:Date.now(),monto:sv,currency:cur,nota:"Manual",fecha:new Date().toISOString()}];
     }
     // keep valores in sync for backward compat
     if(!r.valores) r.valores=Array(12).fill(0);
-    r.valores[m]=val;
+    r.valores[m]=sv;
   }
 }
 function setCur(type,id,m,cur){
@@ -1208,9 +1209,17 @@ function addDpto(){
 }
 function addMov(){
   const inp=document.getElementById("nm-inp");const nm=inp.value.trim();if(!nm)return;
+  const tipo=document.getElementById("nm-tipo")?.value||"gasto";
   const yd=getYD();
-  yd.movRows.push({id:Date.now(),nombre:nm,txs:Array(12).fill(null).map(()=>[]),currency:Array(12).fill("ARS")});
-  inp.value="";snap(`Agregar mov "${nm}"`);schedSave();render();toast("✓ "+nm,"tok");
+  yd.movRows.push({id:Date.now(),nombre:nm,tipo,txs:Array(12).fill(null).map(()=>[]),currency:Array(12).fill("ARS")});
+  inp.value="";snap(`Agregar mov "${nm}"`);schedSave();render();toast("✓ "+nm+(tipo==="gasto"?" (gasto)":" (ingreso)"),"tok");
+}
+// Aplica el signo según el tipo de la fila (gasto = negativo, ingreso = positivo)
+function signByTipo(r,v){
+  const n=Number(v)||0;
+  if(r&&r.tipo==="gasto") return -Math.abs(n);
+  if(r&&r.tipo==="ingreso") return Math.abs(n);
+  return n; // filas sin tipo: respeta el signo escrito
 }
 function addTarjeta(){
   const nm=prompt("Nombre de la tarjeta (ej: Tarjeta Visa):","Tarjeta");
@@ -2001,8 +2010,8 @@ function render(){
               <div class="tx-list">${txItems}</div>
               <div class="tx-add-row">
                 <select id="tx-tipo-${r.id}-${m}" class="tx-tipo-sel">
-                  <option value="ing">📈 Ingreso</option>
-                  <option value="gas">📉 Gasto</option>
+                  <option value="ing"${r.tipo==="ingreso"?" selected":""}>📈 Ingreso</option>
+                  <option value="gas"${r.tipo==="gasto"?" selected":""}>📉 Gasto</option>
                 </select>
                 <input type="number" id="tx-monto-${r.id}-${m}" placeholder="Monto" step="0.01" min="0">
                 <select id="tx-cur-${r.id}-${m}">
@@ -2036,7 +2045,7 @@ function render(){
           ${!isA?`<span class="drag-handle" draggable="true" ondragstart="dragStart(event,${r.id},'mov')" ondragend="dragEnd(event)" onclick="openRowMenu(event,${r.id},'mov')" title="Opciones (eliminar / arrastrar)">⠿</span>`:""}
           ${isA
             ?`<span class="pill pp">auto</span><em style="color:var(--purple2)">${r.nombre}</em>`
-            :`<span onclick="startNameEdit(this,'mov',${r.id})" style="cursor:pointer">${r.nombre}</span>`}
+            :`${r.tipo?`<span class="pill" title="${r.tipo}" style="background:${r.tipo==="gasto"?"rgba(232,93,74,.14)":"rgba(46,196,160,.14)"};color:${r.tipo==="gasto"?"var(--coral2)":"var(--teal2)"};border:1px solid ${r.tipo==="gasto"?"rgba(232,93,74,.3)":"rgba(46,196,160,.3)"}">${r.tipo==="gasto"?"📉":"📈"}</span>`:""}<span onclick="startNameEdit(this,'mov',${r.id})" style="cursor:pointer">${r.nombre}</span>`}
           ${r.esTarjeta?`<button class="card-resumen-btn" onclick="openResumen(${r.id})" title="Cargar resumen con IA">📄 Resumen</button>`:""}
         </div></td>
         ${cells}
@@ -2088,7 +2097,7 @@ function render(){
           ${acum.map((v,m)=>staticCell(v,m)).join("")}
           <td class="tc ${toc(acum[11],"tb2")}">${fa(acum[11])}</td><td></td></tr>
         </tbody></table></div>
-      <div class="add-row"><input id="nm-inp" placeholder="Nombre del movimiento" onkeydown="if(event.key==='Enter')addMov()"><button class="btn-add" onclick="addMov()">+ Agregar fila</button><button class="btn-add" style="background:var(--amber)" onclick="addTarjeta()">💳 Agregar tarjeta</button></div>
+      <div class="add-row"><input id="nm-inp" placeholder="Nombre del movimiento" onkeydown="if(event.key==='Enter')addMov()"><select id="nm-tipo" class="tx-tipo-sel"><option value="gasto">📉 Gasto</option><option value="ingreso">📈 Ingreso</option></select><button class="btn-add" onclick="addMov()">+ Agregar fila</button><button class="btn-add" style="background:var(--amber)" onclick="addTarjeta()">💳 Agregar tarjeta</button></div>
       <p class="hint">La fila <strong>Mi parte alquileres</strong> se calcula automáticamente desde la solapa Alquileres. Podés elegir ARS / USD / USDT por celda. El balance mensual se acumula en Ahorros automáticamente.</p>`;
     scrollToActive();
   }
