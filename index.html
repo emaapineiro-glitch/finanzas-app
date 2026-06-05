@@ -355,6 +355,9 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
 .login-foot a:hover{color:var(--purple3)}
 #admin-modal-bg{z-index:2500}
 #pwchange-modal-bg{z-index:2600}
+#resumen-modal-bg{z-index:2550}
+.card-resumen-btn{background:rgba(240,169,64,.14);border:1px solid rgba(240,169,64,.35);color:var(--amber2);border-radius:6px;font-size:10px;font-weight:700;padding:2px 7px;margin-left:6px;cursor:pointer;white-space:nowrap}
+.card-resumen-btn:hover{background:rgba(240,169,64,.25)}
 
 /* ── MEJORAS MÓVIL ── */
 @media(max-width:600px){
@@ -704,6 +707,31 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 2px rgba(124,111,239,.1
     <input class="apikey-inp" id="pw-new2" type="password" placeholder="Repetir contraseña" style="width:100%;margin-bottom:10px" onkeydown="if(event.key==='Enter')doChangePassword()">
     <div class="vbtn-row"><button class="vbtn primary" onclick="doChangePassword()">Cambiar contraseña</button><button class="vbtn ghost" onclick="skipPwChange()">Más tarde</button></div>
     <div id="pw-msg" style="margin-top:8px;font-size:12px;color:var(--coral2);text-align:center;min-height:16px"></div>
+  </div>
+</div>
+<!-- RESUMEN DE TARJETA MODAL -->
+<div class="vmodal-bg" id="resumen-modal-bg" onclick="if(event.target===this)closeResumen()">
+  <div class="vmodal">
+    <div class="vmodal-handle"></div>
+    <div class="vmodal-title">💳 Resumen de tarjeta</div>
+    <div class="vmodal-sub" id="resumen-card-name">Subí el resumen (foto o PDF) y la IA carga los pagos.</div>
+    <div class="apikey-row">
+      <label>🔑 API Key Claude:</label>
+      <input class="apikey-inp" id="resumen-apikey" type="password" placeholder="sk-ant-..." oninput="saveApiKey(this.value)">
+      <span class="apikey-note">Se guarda solo en este dispositivo. Conseguila gratis en console.anthropic.com</span>
+    </div>
+    <input type="file" id="resumen-file" accept="image/*,application/pdf" style="display:none" onchange="resumenFilePicked(event)">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="vbtn ghost" onclick="document.getElementById('resumen-file').click()">📎 Elegir archivo (foto o PDF)</button>
+      <span id="resumen-filename" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <div id="resumen-status" style="font-size:12px;min-height:18px;margin-bottom:6px"></div>
+    <div id="resumen-result"></div>
+    <div class="vbtn-row" style="margin-top:14px">
+      <button class="vbtn primary" id="resumen-read-btn" onclick="readResumen()" disabled>✨ Leer con IA</button>
+      <button class="vbtn primary" id="resumen-apply-btn" onclick="applyResumen()" style="display:none">✅ Aplicar pagos</button>
+      <button class="vbtn ghost" onclick="closeResumen()">Cerrar</button>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -1157,6 +1185,95 @@ function addMov(){
   const yd=getYD();
   yd.movRows.push({id:Date.now(),nombre:nm,txs:Array(12).fill(null).map(()=>[]),currency:Array(12).fill("ARS")});
   inp.value="";snap(`Agregar mov "${nm}"`);schedSave();render();toast("✓ "+nm,"tok");
+}
+function addTarjeta(){
+  const nm=prompt("Nombre de la tarjeta (ej: Tarjeta Visa):","Tarjeta");
+  if(!nm||!nm.trim())return;
+  const yd=getYD();
+  yd.movRows.push({id:Date.now(),nombre:"💳 "+nm.trim(),esTarjeta:true,txs:Array(12).fill(null).map(()=>[]),valores:Array(12).fill(0),currency:Array(12).fill("ARS")});
+  snap("Agregar tarjeta");schedSave();render();toast("✓ Tarjeta creada: "+nm,"tok");
+}
+
+/* ══ RESUMEN DE TARJETA (lectura por IA con clave del usuario) ══ */
+let resumenCardId=null,resumenFileData=null,resumenFileType=null,resumenParsed=null;
+function openResumen(cardId){
+  resumenCardId=cardId;resumenParsed=null;resumenFileData=null;resumenFileType=null;
+  const c=getYD().movRows.find(r=>r.id==cardId);
+  document.getElementById("resumen-modal-bg").classList.add("open");
+  document.getElementById("resumen-apikey").value=loadApiKey();
+  document.getElementById("resumen-card-name").textContent=(c?c.nombre:"Tarjeta")+" — subí el resumen (foto o PDF) y la IA carga los pagos.";
+  document.getElementById("resumen-filename").textContent="";
+  document.getElementById("resumen-status").textContent="";
+  document.getElementById("resumen-result").innerHTML="";
+  document.getElementById("resumen-read-btn").disabled=true;
+  document.getElementById("resumen-apply-btn").style.display="none";
+  document.getElementById("resumen-file").value="";
+}
+function closeResumen(){document.getElementById("resumen-modal-bg").classList.remove("open");}
+function resumenFilePicked(e){
+  const f=e.target.files[0];if(!f)return;
+  resumenFileType=f.type||(f.name.toLowerCase().endsWith(".pdf")?"application/pdf":"image/jpeg");
+  document.getElementById("resumen-filename").textContent="📎 "+f.name;
+  const reader=new FileReader();
+  reader.onload=()=>{ resumenFileData=String(reader.result).split(",")[1]; document.getElementById("resumen-read-btn").disabled=false; };
+  reader.readAsDataURL(f);
+}
+async function readResumen(){
+  const apiKey=(loadApiKey()||document.getElementById("resumen-apikey").value.trim());
+  if(!apiKey){toast("Ingresá tu API Key de Claude","tundo");return;}
+  if(!resumenFileData){toast("Elegí un archivo","tundo");return;}
+  const st=document.getElementById("resumen-status");
+  st.style.color="var(--text2)";st.textContent="⏳ Leyendo el resumen con IA… (puede tardar unos segundos)";
+  document.getElementById("resumen-read-btn").disabled=true;
+  const isPdf=resumenFileType==="application/pdf";
+  const sourceBlock=isPdf
+    ?{type:"document",source:{type:"base64",media_type:"application/pdf",data:resumenFileData}}
+    :{type:"image",source:{type:"base64",media_type:resumenFileType||"image/jpeg",data:resumenFileData}};
+  const sys=`Sos un asistente que lee resúmenes de tarjeta de crédito (Argentina). Extraé los PRÓXIMOS PAGOS a vencer, mes por mes. Año de referencia: ${state.currentYear}.
+Respondé SOLO un objeto JSON válido, sin markdown:
+{"pagos":[{"mes":<0-11>,"monto":<número positivo>,"moneda":"ARS"|"USD"|"USDT","descripcion":"<breve>"}],"nota":"<observación breve>"}
+Reglas: "mes" es 0=Enero..11=Diciembre del vencimiento. Incluí el total del próximo vencimiento y, si figuran cuotas futuras, una entrada por cada mes futuro. Montos siempre positivos. Si no podés leerlo, devolvé {"pagos":[],"nota":"motivo"}.`;
+  try{
+    const resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,system:sys,messages:[{role:"user",content:[sourceBlock,{type:"text",text:"Leé este resumen de tarjeta y devolvé el JSON de pagos por mes."}]}]})
+    });
+    if(!resp.ok){let e={};try{e=await resp.json();}catch(x){}throw new Error(e.error?.message||resp.statusText);}
+    const data=await resp.json();
+    const raw=(data.content?.[0]?.text||"").trim().replace(/```json|```/g,"").trim();
+    resumenParsed=JSON.parse(raw);
+    renderResumenResult(resumenParsed);
+    st.textContent="";
+  }catch(err){
+    st.style.color="var(--coral2)";st.textContent="❌ "+err.message;
+  }finally{
+    document.getElementById("resumen-read-btn").disabled=false;
+  }
+}
+function renderResumenResult(p){
+  const pagos=(p&&p.pagos)||[];
+  const cont=document.getElementById("resumen-result");
+  if(!pagos.length){cont.innerHTML=`<div style="color:var(--coral2);font-size:13px;margin-top:8px">No se detectaron pagos. ${p&&p.nota?("("+p.nota+")"):"Probá con una imagen más clara o un PDF."}</div>`;document.getElementById("resumen-apply-btn").style.display="none";return;}
+  const rows=pagos.map(pg=>`<div class="ai-field"><span style="min-width:70px">${MONTHS[pg.mes]||"?"}</span><span style="flex:1">${pg.descripcion||"Pago"}</span><strong style="color:var(--coral2)">-${fmt(Math.abs(pg.monto),pg.moneda||"ARS")}</strong></div>`).join("");
+  cont.innerHTML=`<div style="font-size:12px;color:var(--text2);margin:10px 0 6px">Detecté ${pagos.length} pago(s). Revisalos y aplicá:</div>${rows}${p.nota?`<div style="font-size:11px;color:var(--text3);margin-top:6px">💬 ${p.nota}</div>`:""}`;
+  document.getElementById("resumen-apply-btn").style.display="";
+}
+function applyResumen(){
+  if(!resumenParsed||!resumenCardId)return;
+  const yd=getYD();const r=yd.movRows.find(x=>x.id==resumenCardId);if(!r)return;
+  migrateRow(r);
+  const pagos=(resumenParsed.pagos||[]).filter(p=>p.mes>=0&&p.mes<=11);
+  const meses=[...new Set(pagos.map(p=>p.mes))];
+  meses.forEach(m=>{ if(r.txs[m]) r.txs[m]=r.txs[m].filter(t=>t.src!=="resumen"); });
+  pagos.forEach(pg=>{
+    const m=pg.mes;if(!r.txs[m])r.txs[m]=[];
+    const cur=pg.moneda||"ARS";
+    r.txs[m].push({id:Date.now()+Math.floor(Math.random()*1e6),monto:-Math.abs(Number(pg.monto)||0),currency:cur,rate:cur==="ARS"?undefined:"venta",nota:pg.descripcion||"Resumen tarjeta",fecha:new Date().toISOString(),src:"resumen"});
+  });
+  snap("Resumen de tarjeta cargado");schedSave();curTab="mov";render();
+  toast(`✅ ${pagos.length} pago(s) cargados en ${r.nombre}`,"tok");
+  closeResumen();
 }
 function changeYear(d){
   state.currentYear+=d;
@@ -1874,6 +1991,7 @@ function render(){
           ${isA
             ?`<span class="pill pp">auto</span><em style="color:var(--purple2)">${r.nombre}</em>`
             :`<span onclick="startNameEdit(this,'mov',${r.id})" style="cursor:pointer">${r.nombre}</span>`}
+          ${r.esTarjeta?`<button class="card-resumen-btn" onclick="openResumen(${r.id})" title="Cargar resumen con IA">📄 Resumen</button>`:""}
         </div></td>
         ${cells}
         <td class="tc ${toc(total,total>=0?'tt':'tco')}">${fa(total)}</td>
@@ -1924,7 +2042,7 @@ function render(){
           ${acum.map((v,m)=>staticCell(v,m)).join("")}
           <td class="tc ${toc(acum[11],"tb2")}">${fa(acum[11])}</td><td></td></tr>
         </tbody></table></div>
-      <div class="add-row"><input id="nm-inp" placeholder="Nombre del movimiento" onkeydown="if(event.key==='Enter')addMov()"><button class="btn-add" onclick="addMov()">+ Agregar fila</button></div>
+      <div class="add-row"><input id="nm-inp" placeholder="Nombre del movimiento" onkeydown="if(event.key==='Enter')addMov()"><button class="btn-add" onclick="addMov()">+ Agregar fila</button><button class="btn-add" style="background:var(--amber)" onclick="addTarjeta()">💳 Agregar tarjeta</button></div>
       <p class="hint">La fila <strong>Mi parte alquileres</strong> se calcula automáticamente desde la solapa Alquileres. Podés elegir ARS / USD / USDT por celda. El balance mensual se acumula en Ahorros automáticamente.</p>`;
     scrollToActive();
   }
