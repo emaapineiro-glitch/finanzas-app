@@ -1486,7 +1486,7 @@ function render(){
   let baseOrder=(state.tabOrder||["alq","mov","sav","res"]).filter(t=>FIXED_DEFS[t]&&(t!=="alq"||alqOn));
   if(alqOn&&!baseOrder.includes("alq")) baseOrder.unshift("alq");
   ["mov","sav","res"].forEach(t=>{ if(!baseOrder.includes(t)) baseOrder.push(t); }); // asegurar fijas presentes
-  const negociosList=yd.negocios||[];
+  const negociosList=getYD().negocios||[];
   const bizTabs=negociosList.map(b=>({id:"biz_"+b.id,label:"💼 "+(b.nombre||"Negocio")}));
   let tabList=[];
   baseOrder.forEach(t=>{
