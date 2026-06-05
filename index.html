@@ -375,7 +375,55 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
   .tab-btn{font-size:11px;padding:8px 2px}
   .stat-grid{grid-template-columns:1fr 1fr;gap:7px}
   .sv{font-size:15px}
+  .profile-menu{width:210px}
 }
+
+/* ── MENÚ DE PERFIL ── */
+.profile-wrap{position:relative}
+.profile-btn{width:38px;height:38px;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);color:var(--purple3);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.profile-btn:hover{border-color:var(--purple)}
+.profile-menu{position:absolute;right:0;top:46px;width:240px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);padding:6px;z-index:1500;display:none}
+.profile-menu.open{display:block}
+.pm-header{display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);margin-bottom:6px}
+.pm-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--teal));display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.pm-name{font-size:13px;font-weight:700;color:var(--text1);text-transform:capitalize}
+.pm-email{font-size:11px;color:var(--text3);word-break:break-all}
+.pm-item{padding:10px;border-radius:8px;font-size:13px;color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:8px}
+.pm-item:hover{background:var(--bg3);color:var(--text1)}
+.pm-danger{color:var(--coral2)}
+.pm-danger:hover{background:rgba(232,93,74,.1);color:var(--coral2)}
+
+/* ── BOTÓN + (agregar negocio) ── */
+.tab-add{flex:0 0 auto!important;min-width:42px;color:var(--teal2)!important;font-size:18px;font-weight:700}
+.tab-add:hover{background:rgba(46,196,160,.12)!important;color:var(--teal2)!important}
+
+/* ── METAS DE AHORRO ── */
+.goals-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:10px;margin-bottom:20px}
+.goal-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:12px}
+.goal-head{display:flex;align-items:center;gap:6px;margin-bottom:9px}
+.goal-name{flex:1;min-width:0;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;font-weight:700;color:var(--text1);outline:none}
+.goal-name:focus{border-color:var(--purple)}
+.goal-bar{height:8px;background:var(--bg4);border-radius:5px;overflow:hidden;margin-bottom:3px}
+.goal-bar-fill{height:100%;border-radius:5px;transition:width .3s}
+.goal-pct{text-align:right;font-size:11px;font-weight:700;margin-bottom:7px}
+.goal-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.goal-row label{font-size:11px;color:var(--text3);min-width:58px}
+.goal-inp{width:100px;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-size:12px;color:var(--text1);text-align:right;outline:none}
+.goal-inp:focus{border-color:var(--purple)}
+.goal-foot{font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5}
+
+/* ── TEMA CLARO ── */
+body.light{
+  --bg:#eef0f8;--bg2:#ffffff;--bg3:#f5f6fc;--bg4:#e9ebf6;
+  --purple:#6a5cf0;--purple2:#7c6fef;--purple3:#5544c4;
+  --text1:#1c1c2e;--text2:#5a4fcf;--text3:#8588a3;
+  --border:rgba(108,95,230,0.18);--border2:rgba(108,95,230,0.35);
+  background:#eef0f8;color:#1c1c2e;
+}
+body.light thead th{color:var(--purple3)}
+body.light .toolbar,body.light .month-nav,body.light .tabs{background:var(--bg2)}
+body.light td.cn{background:var(--bg2)}
+body.light .nd:hover{background:var(--bg4)}
 </style>
 </head>
 <body class="logged-out">
@@ -416,6 +464,18 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
         <div class="fx-div"></div>
         <div class="fx-status"><div class="dot" id="fx-dot"></div><span id="fx-status-txt">Manual</span></div>
         <button class="fx-btn" onclick="fetchFX()">↻ Live</button>
+      </div>
+      <div class="profile-wrap">
+        <button class="profile-btn" onclick="toggleProfileMenu(event)" title="Perfil">👤</button>
+        <div class="profile-menu" id="profile-menu">
+          <div class="pm-header">
+            <div class="pm-avatar">👤</div>
+            <div style="min-width:0"><div class="pm-name" id="pm-name">Usuario</div><div class="pm-email" id="pm-email"></div></div>
+          </div>
+          <div class="pm-item" onclick="openPwChangeVoluntary()">🔑 Cambiar contraseña</div>
+          <div class="pm-item" onclick="toggleTheme()"><span id="pm-theme-label">🌞 Modo claro</span></div>
+          <div class="pm-item pm-danger" onclick="doLogout()">🚪 Cerrar sesión</div>
+        </div>
       </div>
     </div>
   </div>
@@ -555,7 +615,7 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
   <div class="vmodal" style="max-width:420px">
     <div class="vmodal-handle"></div>
     <div class="vmodal-title">🔐 Cambiá tu contraseña</div>
-    <div class="vmodal-sub">Es tu primer ingreso. Elegí una contraseña nueva, personal y secreta.</div>
+    <div class="vmodal-sub" id="pw-sub">Es tu primer ingreso. Elegí una contraseña nueva, personal y secreta.</div>
     <input class="apikey-inp" id="pw-new" type="password" placeholder="Nueva contraseña (mín. 6)" style="width:100%;margin-bottom:8px">
     <input class="apikey-inp" id="pw-new2" type="password" placeholder="Repetir contraseña" style="width:100%;margin-bottom:10px" onkeydown="if(event.key==='Enter')doChangePassword()">
     <div class="vbtn-row"><button class="vbtn primary" onclick="doChangePassword()">Cambiar contraseña</button><button class="vbtn ghost" onclick="skipPwChange()">Más tarde</button></div>
@@ -580,11 +640,12 @@ function makeYD(){
     savCurrency:Array(12).fill("ARS"),  // where each month's balance goes
     savExtra:{ARS:Array(12).fill(0),USD:Array(12).fill(0),USDT:Array(12).fill(0)}, // manual extra savings
     savPrev:{ARS:0,USD:0,USDT:0}, // previous/existing savings before this year
+    savGoals:[], // metas de ahorro (vacaciones, auto, etc.)
     negocios:[] // list of business objects
   };
 }
 
-let state={currentYear:2026,fx:{USD:1435,USDT:1432},years:{"2026":makeYD()},tabOrder:["alq","mov","sav","biz","res"]};
+let state={currentYear:2026,fx:{USD:1435,USDT:1432},years:{"2026":makeYD()},tabOrder:["alq","mov","sav","res"]};
 let hist=[],hIdx=-1,editingCell=null,curTab="alq",activeMonth=TODAY_MONTH,activeBiz=null;
 let saveTimer=null,toastTimer=null;
 let currentUid=null;
@@ -856,6 +917,21 @@ function setSavExtra(cur,m,val){
   yd.savExtra[cur][m]=isNaN(parseFloat(val))?0:parseFloat(val);
   snap(`Ahorro extra ${cur} [${MONTHS[m].slice(0,3)}]`);schedSave();render();
 }
+/* ── METAS DE AHORRO (sub-ítems) ── */
+function addSavGoal(){
+  const yd=getYD();if(!yd.savGoals)yd.savGoals=[];
+  yd.savGoals.push({id:Date.now(),nombre:"Nueva meta",objetivo:0,actual:0,cur:"ARS"});
+  snap("Agregar meta de ahorro");schedSave();render();
+}
+function delSavGoal(id){
+  const yd=getYD();yd.savGoals=(yd.savGoals||[]).filter(g=>g.id!=id);
+  snap("Eliminar meta");schedSave();render();
+}
+function setSavGoalField(id,field,val){
+  const yd=getYD();const g=(yd.savGoals||[]).find(g=>g.id==id);if(!g)return;
+  g[field]=(field==="objetivo"||field==="actual")?(Number(val)||0):val;
+  snap("Meta de ahorro");schedSave();render();
+}
 function startNameEdit(el,type,id){
   const yd=getYD();
   const cur=type==="dpto"?yd.dptos.find(d=>d.id==id)?.nombre:yd.movRows.find(r=>r.id==id)?.nombre;
@@ -1067,8 +1143,18 @@ function tabDrop(e,t){
   reorderTab(tabDragSrc,t);tabDragSrc=null;
 }
 function reorderTab(src,target){
-  if(!src||src===target)return;
-  const order=state.tabOrder||["alq","mov","sav","biz","res"];
+  if(!src||!target||src===target)return;
+  // Reordenar negocios entre sí
+  if(src.indexOf("biz_")===0&&target.indexOf("biz_")===0){
+    const arr=getYD().negocios||[];
+    const fi=arr.findIndex(b=>"biz_"+b.id===src),ti=arr.findIndex(b=>"biz_"+b.id===target);
+    if(fi<0||ti<0)return;
+    const [it]=arr.splice(fi,1);arr.splice(ti,0,it);
+    snap("Reordenar negocios");schedSave();render();return;
+  }
+  // Reordenar pestañas fijas (ignorar mezcla fija/negocio)
+  if(src.indexOf("biz_")===0||target.indexOf("biz_")===0)return;
+  const order=(state.tabOrder||["alq","mov","sav","res"]).filter(t=>t!=="biz");
   const fi=order.indexOf(src),ti=order.indexOf(target);
   if(fi<0||ti<0)return;
   order.splice(fi,1);order.splice(ti,0,src);
@@ -1162,11 +1248,19 @@ function addBiz(){
   activeBiz=b.id;
   inp.value="";snap(`Agregar negocio "${nm}"`);schedSave();render();toast("✓ Negocio creado: "+nm,"tok");
 }
+function addBizTab(){
+  const yd=getYD();if(!yd.negocios)yd.negocios=[];
+  const b=makeBiz("Negocio "+(yd.negocios.length+1));
+  yd.negocios.push(b);
+  activeBiz=b.id;curTab="biz_"+b.id;
+  snap("Agregar negocio");schedSave();render();toast("✓ Negocio creado — renombralo arriba","tok");
+}
 function delBiz(id){
   const yd=getYD();
   const nm=yd.negocios.find(b=>b.id==id)?.nombre||"negocio";
   yd.negocios=yd.negocios.filter(b=>b.id!=id);
   if(activeBiz==id)activeBiz=yd.negocios[0]?.id||null;
+  if(curTab==="biz_"+id) curTab=yd.negocios[0]?("biz_"+yd.negocios[0].id):"mov";
   snap(`Eliminar negocio "${nm}"`);schedSave();render();toast("🗑 "+nm);
 }
 function selectBiz(id){activeBiz=id;render();}
@@ -1317,8 +1411,8 @@ function renderBiz(C){
 
   document.getElementById("tab-biz").innerHTML=`
     <div class="biz-header">
-      <div class="biz-selector">${pills}</div>
-      ${addForm}
+      <div style="font-size:16px;font-weight:700;color:var(--purple3)">💼 ${b.nombre}</div>
+      <button class="tb-btn" style="color:var(--coral2)" onclick="delBiz(${b.id})">🗑 Eliminar negocio</button>
     </div>
     <div class="stat-grid">
       <div class="stat-card sc-t"><div class="sl">📈 Ingresos anuales</div><div class="sv">${fa(sumBizIng)}</div></div>
@@ -1386,16 +1480,31 @@ function render(){
   document.getElementById("year-display").textContent=state.currentYear;
   document.getElementById("fx-usd").value=Math.round(state.fx.USD);
   document.getElementById("fx-usdt").value=Math.round(state.fx.USDT);
-  // Determinar pestañas visibles y CORREGIR la pestaña activa ANTES de pintar paneles
-  const TAB_DEFS={alq:{label:"🏢 Alquileres"},mov:{label:"💳 Movimientos"},sav:{label:"🏦 Ahorros"},biz:{label:"💼 Negocios"},res:{label:"📊 Resumen"}};
+  // Pestañas: fijas + un tab por cada negocio + botón "+" para crear negocios
+  const FIXED_DEFS={alq:"🏢 Alquileres",mov:"💳 Movimientos",sav:"🏦 Ahorros",res:"📊 Resumen"};
   const alqOn=state.alqEnabled!==false; // undefined o true => visible; solo false la oculta
-  let tabOrder=(state.tabOrder||["alq","mov","sav","biz","res"]).filter(t=>TAB_DEFS[t]&&(t!=="alq"||alqOn));
-  if(alqOn&&!tabOrder.includes("alq")) tabOrder.unshift("alq");
-  if(!tabOrder.includes(curTab)) curTab=tabOrder[0]||"mov";
-  ["alq","mov","sav","biz","res"].forEach(t=>{
-    document.getElementById("tab-"+t).className="panel"+(curTab===t?" active":"");
+  let baseOrder=(state.tabOrder||["alq","mov","sav","res"]).filter(t=>FIXED_DEFS[t]&&(t!=="alq"||alqOn));
+  if(alqOn&&!baseOrder.includes("alq")) baseOrder.unshift("alq");
+  ["mov","sav","res"].forEach(t=>{ if(!baseOrder.includes(t)) baseOrder.push(t); }); // asegurar fijas presentes
+  const negociosList=yd.negocios||[];
+  const bizTabs=negociosList.map(b=>({id:"biz_"+b.id,label:"💼 "+(b.nombre||"Negocio")}));
+  let tabList=[];
+  baseOrder.forEach(t=>{
+    if(t==="res"){ tabList.push(...bizTabs); tabList.push({id:"res",label:FIXED_DEFS.res}); }
+    else tabList.push({id:t,label:FIXED_DEFS[t]});
   });
-  document.querySelector(".tabs").innerHTML=tabOrder.map(t=>`<button class="tab-btn${curTab===t?" active":""}" data-tab="${t}" draggable="true" ondragstart="tabDragStart(event,'${t}')" ondragend="tabDragEnd(event)" ondragover="tabDragOver(event,'${t}')" ondrop="tabDrop(event,'${t}')" ontouchstart="tabTouchStart(event,'${t}')" ontouchmove="tabTouchMove(event)" ontouchend="tabTouchEnd(event)" onclick="switchTab('${t}')">${TAB_DEFS[t].label}</button>`).join("");
+  if(!baseOrder.includes("res")) tabList.push(...bizTabs);
+  const validIds=tabList.map(x=>x.id);
+  if(!validIds.includes(curTab)) curTab=validIds[0]||"mov";
+  const isBizTab=curTab.indexOf("biz_")===0;
+  const panelKey=isBizTab?"biz":curTab;
+  if(isBizTab) activeBiz=Number(curTab.slice(4));
+  ["alq","mov","sav","biz","res"].forEach(t=>{
+    document.getElementById("tab-"+t).className="panel"+(panelKey===t?" active":"");
+  });
+  document.querySelector(".tabs").innerHTML=
+    tabList.map(tb=>`<button class="tab-btn${curTab===tb.id?" active":""}" data-tab="${tb.id}" draggable="true" ondragstart="tabDragStart(event,'${tb.id}')" ondragend="tabDragEnd(event)" ondragover="tabDragOver(event,'${tb.id}')" ondrop="tabDrop(event,'${tb.id}')" ontouchstart="tabTouchStart(event,'${tb.id}')" ontouchmove="tabTouchMove(event)" ontouchend="tabTouchEnd(event)" onclick="switchTab('${tb.id}')">${tb.label}</button>`).join("")
+    +`<button class="tab-btn tab-add" onclick="addBizTab()" title="Agregar negocio">＋</button>`;
   renderMonthNav();
 
   const yd=getYD();
@@ -1632,7 +1741,7 @@ function render(){
         </td>
         <td class="num${mc?" "+mc:""}">
           <div style="display:flex;align-items:center;gap:3px;justify-content:flex-end">
-            <span style="font-size:9px;color:var(--text3)">+Extra:</span>
+            <span style="font-size:9px;color:var(--text3)">Destinar:</span>
             <input class="sav-inp" type="number" value="${extraShow||""}" placeholder="0" onchange="setSavExtra('${c}',${i},this.value)" style="color:${color};width:100px">
           </div>
         </td>
@@ -1650,6 +1759,30 @@ function render(){
         <div class="stat-card sc-b"><div class="sl">₮ USDT acumulado</div><div class="sv">₮${new Intl.NumberFormat("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(totSavUSDT+(Number(sp.USDT)||0))}</div><div class="ss">= ${fa(toARS(totSavUSDT+(Number(sp.USDT)||0),"USDT"))}</div></div>
         <div class="stat-card sc-t"><div class="sl">🏛 ARS acumulado</div><div class="sv">${fa(totSavARS+(Number(sp.ARS)||0))}</div></div>
       </div>
+      ${(()=>{
+        const goals=yd.savGoals||[];
+        const goalsHtml=goals.map(g=>{
+          const obj=Number(g.objetivo)||0,act=Number(g.actual)||0;
+          const pc=obj>0?Math.min(100,Math.round(act/obj*100)):0;
+          const gc=g.cur||"ARS";
+          const col=gc==="USD"?"var(--amber2)":gc==="USDT"?"var(--blue2)":"var(--teal2)";
+          const f=(v)=>gc==="ARS"?fa(v):fmt(v,gc);
+          return`<div class="goal-card">
+            <div class="goal-head">
+              <input class="goal-name" value="${(g.nombre||"").replace(/"/g,"&quot;")}" onchange="setSavGoalField(${g.id},'nombre',this.value)">
+              <button class="btn-del" onclick="delSavGoal(${g.id})" title="Eliminar meta">🗑</button>
+            </div>
+            <div class="goal-bar"><div class="goal-bar-fill" style="width:${pc}%;background:${col}"></div></div>
+            <div class="goal-pct" style="color:${col}">${pc}%</div>
+            <div class="goal-row"><label>Ahorrado</label>${cpH(gc,`setSavGoalField(${g.id},'cur',this.value)`)}<input class="goal-inp" type="number" value="${act||""}" placeholder="0" onchange="setSavGoalField(${g.id},'actual',this.value)"></div>
+            <div class="goal-row"><label>Objetivo</label><input class="goal-inp" type="number" value="${obj||""}" placeholder="0" onchange="setSavGoalField(${g.id},'objetivo',this.value)" style="margin-left:auto"></div>
+            <div class="goal-foot">${f(act)} de ${f(obj)} ${obj>act?`· faltan ${f(obj-act)}`:obj>0?"· ✅ ¡Completada!":""}</div>
+          </div>`;
+        }).join("");
+        return`<div class="sec-title"><div class="stl"><div class="sec-bar"></div><span>🎯 Metas de ahorro</span></div>
+          <button class="btn-add" style="font-size:11px;padding:5px 12px" onclick="addSavGoal()">+ Nueva meta</button></div>
+        <div class="goals-grid">${goals.length?goalsHtml:`<div style="color:var(--text3);font-size:13px;padding:10px 4px">Todavía no tenés metas. Tocá <strong>"+ Nueva meta"</strong> para crear una (ej: Vacaciones 🏖, Cambiar auto 🚗, Renovar alquiler 🏠…).</div>`}</div>`;
+      })()}
       <!-- AHORROS PREVIOS -->
       <div class="sec-title"><div class="stl"><div class="sec-bar"></div><span>💰 Ahorros previos (antes de este año)</span></div></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:18px;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:14px">
@@ -1674,16 +1807,16 @@ function render(){
         </div>
       </div>
       <div class="flow-info">💡 El balance mensual de Movimientos se acumula en la moneda elegida. El <strong>acumulado</strong> arranca desde los ahorros previos.</div>
-      <div class="sec-title"><div class="stl"><div class="sec-bar"></div><span>Destino de ahorros por mes</span></div><span style="font-size:10px;color:var(--text3)">Elegí en qué moneda guardar el balance de cada mes</span></div>
+      <div class="sec-title"><div class="stl"><div class="sec-bar"></div><span>Ahorro por mes</span></div><span style="font-size:10px;color:var(--text3)">💚 Balance del mes = lo que sobró · ✋ Destinado = lo que vos decidís guardar a mano</span></div>
       <div class="table-wrap" id="tw-sav">
         <table><thead><tr>
-          <th class="cn">Mes</th><th>Balance mov.</th><th>Moneda</th><th>En moneda</th><th>+ Extra</th><th>Total mes</th><th>Acumulado ARS</th>
+          <th class="cn">Mes</th><th>💚 Balance del mes</th><th>Moneda</th><th>En moneda</th><th>✋ Destinado</th><th>Total mes</th><th>Acumulado ARS</th>
         </tr></thead><tbody>${savCurRows}</tbody></table></div>`;
     scrollToActive();
   }
 
   /* ═══ NEGOCIOS ═══ */
-  if(curTab==="biz") renderBiz(C);
+  if(panelKey==="biz") renderBiz(C);
 
   /* ═══ RESUMEN ═══ */
   if(curTab==="res"){
@@ -2290,11 +2423,13 @@ function maybePromptPasswordChange(uid, reg){
   const must = !reg || reg.mustChangePassword!==false; // undefined/true => pedir una vez
   if(must) showPwChange();
 }
-function showPwChange(){
+function showPwChange(voluntary){
   document.getElementById("pwchange-modal-bg").classList.add("open");
   document.getElementById("pw-new").value="";
   document.getElementById("pw-new2").value="";
   document.getElementById("pw-msg").textContent="";
+  const sub=document.getElementById("pw-sub");
+  if(sub)sub.textContent=voluntary?"Elegí tu nueva contraseña.":"Es tu primer ingreso. Elegí una contraseña nueva, personal y secreta.";
 }
 function closePwChange(){ document.getElementById("pwchange-modal-bg").classList.remove("open"); }
 async function doChangePassword(){
@@ -2376,17 +2511,33 @@ function cloudPush(){
 function scheduleCloudPush(){clearTimeout(cloudPushTimer);cloudPushTimer=setTimeout(cloudPush,400);}
 
 function makeUserTemplate(){
-  return {currentYear:TODAY_YEAR,fx:{USD:state.fx.USD,USDT:state.fx.USDT},years:{[String(TODAY_YEAR)]:makeYD()},tabOrder:["mov","sav","biz","res"],alqEnabled:false,_ts:Date.now()};
+  return {currentYear:TODAY_YEAR,fx:{USD:state.fx.USD,USDT:state.fx.USDT},years:{[String(TODAY_YEAR)]:makeYD()},tabOrder:["mov","sav","res"],alqEnabled:false,_ts:Date.now()};
 }
 
 function renderAuthToolbar(user){
-  let el=document.getElementById("auth-toolbar");
-  if(!el){
-    const tr=document.querySelector(".tb-right");
-    if(tr){el=document.createElement("div");el.id="auth-toolbar";el.style.cssText="display:flex;align-items:center;gap:6px;margin-left:auto";tr.appendChild(el);}
-  }
-  if(el) el.innerHTML=`<span style="font-size:11px;color:var(--text3)">👤 ${user.email}</span><button class="tb-btn" onclick="doLogout()" style="color:var(--coral2)">Salir</button>`;
+  const nm=user.email?user.email.split("@")[0]:"Usuario";
+  const e1=document.getElementById("pm-email"); if(e1)e1.textContent=user.email||"";
+  const n1=document.getElementById("pm-name"); if(n1)n1.textContent=nm;
 }
+
+/* ── MENÚ DE PERFIL + TEMA ── */
+function toggleProfileMenu(e){ if(e)e.stopPropagation(); const m=document.getElementById("profile-menu"); if(m)m.classList.toggle("open"); }
+document.addEventListener("click",e=>{
+  const w=e.target.closest&&e.target.closest(".profile-wrap");
+  if(!w){const m=document.getElementById("profile-menu"); if(m)m.classList.remove("open");}
+});
+function openPwChangeVoluntary(){ const m=document.getElementById("profile-menu"); if(m)m.classList.remove("open"); showPwChange(true); }
+function applyTheme(t){
+  const light=t==="light";
+  document.body.classList.toggle("light",light);
+  const lbl=document.getElementById("pm-theme-label"); if(lbl)lbl.textContent=light?"🌙 Modo oscuro":"🌞 Modo claro";
+}
+function toggleTheme(){
+  const next=(localStorage.getItem("fp_theme")==="light")?"dark":"light";
+  localStorage.setItem("fp_theme",next);
+  applyTheme(next);
+}
+applyTheme(localStorage.getItem("fp_theme")==="light"?"light":"dark");
 
 /* ═══ ADMIN ═══ */
 function openAdmin(){
