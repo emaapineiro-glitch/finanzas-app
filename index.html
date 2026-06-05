@@ -982,8 +982,9 @@ function mCls(m){
 }
 
 function numCell(val,cur,id,m,type){
-  const dv=!val||val===0?"—":fmt(val,cur);
-  const cc=vc(toARS(val,cur));
+  const esGasto=(type==="gas"||type==="imp"); // gastos/impuestos: mostrar en negativo y rojo
+  const dv=!val||val===0?"—":(esGasto?"-"+fmt(Math.abs(val),cur):fmt(val,cur));
+  const cc=esGasto?(val?"vn":"vz"):vc(toARS(val,cur));
   const mc=mCls(m);
   return`<td class="num${mc?" "+mc:""}"><div style="display:flex;align-items:center;gap:2px;justify-content:flex-end">${cpH(cur,`setCur('${type}',${id},${m},this.value)`)}<span class="nd ${cc}" onclick="startEdit(this,'${id}',${m},'${type}')">${dv}</span></div></td>`;
 }
@@ -1905,12 +1906,12 @@ function render(){
       const rgbg=di%2?"background:rgba(124,111,239,0.025)":"";
       return`<tr style="${rgbg}">
         <td class="cn"><span class="dpill" style="background:rgba(232,93,74,.15);color:var(--coral2)">${di+1}</span>${d.nombre}</td>
-        ${cells}<td class="tc ${rT>0?"tco":"tt"}">${fa(rT)}</td></tr>`;
+        ${cells}<td class="tc ${rT>0?"tco":"tt"}">${rT>0?"-"+fa(rT):fa(rT)}</td></tr>`;
     }).join("");
     document.getElementById("tab-alq").innerHTML=`
       <div class="stat-grid">
         <div class="stat-card sc-t"><div class="sl">📈 Ingresos anuales</div><div class="sv">${fa(sumAlq)}</div></div>
-        <div class="stat-card sc-c"><div class="sl">📉 Gastos anuales</div><div class="sv">${fa(sumGas)}</div></div>
+        <div class="stat-card sc-c"><div class="sl">📉 Gastos anuales</div><div class="sv">${sumGas>0?"-"+fa(sumGas):fa(sumGas)}</div></div>
         <div class="stat-card ${sumNeto>=0?"sc-t":"sc-c"}"><div class="sl">⚖️ Neto anual</div><div class="sv">${fa(sumNeto)}</div></div>
         <div class="stat-card sc-b"><div class="sl">👤 Mi parte (${pct}%)</div><div class="sv">${fa(sumMio)}</div></div>
       </div>
@@ -1932,8 +1933,8 @@ function render(){
         <tbody>${dGasR}
         <tr class="ra"><td class="cn">🧾 Impuestos</td>
         ${MONTHS.map((_,m)=>numCell(yd.imp[m]||0,yd.impC[m]||"ARS","imp",m,"imp")).join("")}
-        <td class="tc tam">${fa(yd.imp.reduce((a,b,m)=>a+toARS(b,yd.impC[m]||"ARS"),0))}</td></tr>
-        <tr class="rc brt"><td class="cn">Total gastos</td>${gasMes.map((v,m)=>staticCell(v,m,"vn")).join("")}<td class="tc tco">${fa(sumGas)}</td></tr>
+        <td class="tc tam">${(()=>{const s=yd.imp.reduce((a,b,m)=>a+toARS(b,yd.impC[m]||"ARS"),0);return s>0?"-"+fa(s):fa(s);})()}</td></tr>
+        <tr class="rc brt"><td class="cn">Total gastos</td>${gasMes.map((v,m)=>staticCell(-v,m,"vn")).join("")}<td class="tc tco">${sumGas>0?"-"+fa(sumGas):fa(sumGas)}</td></tr>
         <tr class="rt brt"><td class="cn">Neto</td>${neto.map((v,m)=>staticCell(v,m)).join("")}<td class="tc ${toc(sumNeto)}">${fa(sumNeto)}</td></tr>
         <tr class="rb"><td class="cn">Mío (${pct}%)</td>${netoMio.map((v,m)=>staticCell(v,m)).join("")}<td class="tc ${toc(sumMio,"tb2")}">${fa(sumMio)}</td></tr>
         <tr class="rpk"><td class="cn">Socio (${100-pct}%)</td>${netoTio.map((v,m)=>staticCell(v,m)).join("")}<td class="tc ${toc(sumTio,"tpk")}">${fa(sumTio)}</td></tr>
