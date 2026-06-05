@@ -411,6 +411,12 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
 .goal-inp{width:100px;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-size:12px;color:var(--text1);text-align:right;outline:none}
 .goal-inp:focus{border-color:var(--purple)}
 .goal-foot{font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5}
+.goal-aporte{display:flex;align-items:center;gap:5px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);flex-wrap:wrap}
+.goal-aporte .tx-add-btn{font-size:11px;padding:5px 9px}
+.aportes-list{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.aporte-chip{font-size:10px;background:var(--bg4);border:1px solid var(--border);border-radius:5px;padding:2px 6px;color:var(--text2);display:inline-flex;align-items:center;gap:4px}
+.aporte-chip button{background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:0;line-height:1}
+.aporte-chip button:hover{color:var(--coral2)}
 
 /* ── PRIORIDAD DE GASTO ── */
 .prio-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:14px}
@@ -748,6 +754,9 @@ function calc(){
   });
 
   // movimientos: incluye "Mi parte alquileres" como fila fija auto
+  // Aportes manuales a metas de ahorro hechos durante el mes (restan del balance)
+  const aportesMes=MONTHS.map((_,m)=>(yd.savGoals||[]).reduce((s,g)=>
+    s+(g.aportes||[]).filter(a=>a.m===m).reduce((ss,a)=>ss+toARS(a.monto,a.cur),0),0));
   const movMes=MONTHS.map((_,m)=>{
     let s=netoMio[m]+negociosMiParte[m]; // Mi parte de alquileres + negocios siempre suma
     yd.movRows.forEach(r=>{
@@ -765,7 +774,7 @@ function calc(){
         s+=toARS(Number(r.valores?.[m])||0, cur);
       }
     });
-    return s;
+    return s-aportesMes[m]; // los aportes a ahorro restan del balance
   });
 
   // acumulado de movimientos
@@ -851,13 +860,14 @@ function calc(){
         const cur=r.currency?.[m]||"ARS"; addFlow(toARS(Number(r.valores?.[m])||0,cur),cur);
       }
     });
+    expense+=aportesMes[m]; // los aportes a ahorro también consumen por prioridad
     let rem=expense;
     priority.forEach(cur=>{ const take=Math.min(pools[cur]||0,rem); pools[cur]=(pools[cur]||0)-take; rem-=take; });
     if(rem>0){ const last=priority[priority.length-1]; pools[last]=(pools[last]||0)-rem; }
     return pools; // saldo del mes por moneda, en ARS equivalente
   });
 
-  return{alqMes,gasMes,neto,netoMio,netoTio,movMes,acum,savARS,savUSD,savUSDT,savTot,cumSav,negociosMiParte,movRawByCur,balByCurARS};
+  return{alqMes,gasMes,neto,netoMio,netoTio,movMes,acum,savARS,savUSD,savUSDT,savTot,cumSav,negociosMiParte,movRawByCur,balByCurARS,aportesMes};
 }
 
 /* ── FORMAT ── */
@@ -995,6 +1005,19 @@ function setSavAssignField(m,field,val){
   const yd=getYD();const a=yd.savAssign?.[m];if(!a)return;
   a[field]=field==="value"?(Number(val)||0):val;
   snap("Derivación de balance");schedSave();render();
+}
+function addAporte(goalId,monto,cur){
+  const yd=getYD();const g=(yd.savGoals||[]).find(g=>g.id==goalId);if(!g)return;
+  const amt=Math.abs(Number(monto)||0);if(!amt){toast("Ingresá un monto","tundo");return;}
+  if(!g.aportes)g.aportes=[];
+  g.aportes.push({id:Date.now(),m:activeMonth,monto:amt,cur:cur||g.cur||"ARS",fecha:new Date().toISOString()});
+  snap("Aporte a ahorro");schedSave();render();
+  toast("💰 Aporte a \""+g.nombre+"\" en "+MONTHS[activeMonth]+" (restado del balance)","tok");
+}
+function delAporte(goalId,aporteId){
+  const yd=getYD();const g=(yd.savGoals||[]).find(g=>g.id==goalId);if(!g)return;
+  g.aportes=(g.aportes||[]).filter(a=>a.id!=aporteId);
+  snap("Eliminar aporte");schedSave();render();
 }
 function setCurPriorityFront(cur){
   const yd=getYD();
@@ -1579,7 +1602,7 @@ function render(){
 
   const yd=getYD();
   const C=calc();
-  const{alqMes,gasMes,neto,netoMio,netoTio,movMes,acum,savARS,savUSD,savUSDT,savTot,cumSav,negociosMiParte,movRawByCur,balByCurARS}=C;
+  const{alqMes,gasMes,neto,netoMio,netoTio,movMes,acum,savARS,savUSD,savUSDT,savTot,cumSav,negociosMiParte,movRawByCur,balByCurARS,aportesMes}=C;
   const pct=yd.pct||50;
   const sumAlq=alqMes.reduce((a,b)=>a+b,0);
   const sumGas=gasMes.reduce((a,b)=>a+b,0);
@@ -1774,6 +1797,10 @@ function render(){
           ${(yd.negocios||[]).length>0?`<tr class="rg"><td class="cn"><span class="pill" style="background:rgba(74,222,128,.12);color:var(--green);border:1px solid rgba(74,222,128,.3)">neg</span><strong style="color:var(--green)">Mi parte negocios</strong></td>
           ${negociosMiParte.map((v,m)=>staticCell(v,m)).join("")}
           <td class="tc ${toc(negociosMiParte.reduce((a,b)=>a+b,0),"tg")}">${fa(negociosMiParte.reduce((a,b)=>a+b,0))}</td><td></td></tr>`:""}
+          <!-- FILA: Aportes a ahorro (resta del balance) -->
+          ${aportesMes.some(v=>v>0)?`<tr class="ra"><td class="cn"><span class="pill" style="background:rgba(240,169,64,.14);color:var(--amber2);border:1px solid rgba(240,169,64,.3)">ahorro</span><strong style="color:var(--amber2)">💰 Aportes a ahorro</strong></td>
+          ${aportesMes.map((v,m)=>staticCell(-v,m)).join("")}
+          <td class="tc tco">${fa(-aportesMes.reduce((a,b)=>a+b,0))}</td><td></td></tr>`:""}
           <!-- FILAS EDITABLES -->
           ${movRowsHtml}
           <tr class="rp brt"><td class="cn">Total mensual</td>
@@ -1877,10 +1904,14 @@ function render(){
             if(a.mode==="amount") return s+(Number(a.value)||0);
             return s+fromARS(bal,gc);
           },0);
-          const totalAct=act+derivado;
+          const aportesArr=g.aportes||[];
+          const aportado=aportesArr.reduce((s,a)=>s+fromARS(toARS(a.monto,a.cur),gc),0);
+          const totalAct=act+derivado+aportado;
           const pc=obj>0?Math.min(100,Math.max(0,Math.round(totalAct/obj*100))):0;
           const col=gc==="USD"?"var(--amber2)":gc==="USDT"?"var(--blue2)":"var(--teal2)";
           const f=(v)=>gc==="ARS"?fa(v):fmt(v,gc);
+          const apCur=`<select class="cp" id="ap-cur-${g.id}"><option value="ARS"${gc==="ARS"?" selected":""}>ARS</option><option value="USD"${gc==="USD"?" selected":""}>USD</option><option value="USDT"${gc==="USDT"?" selected":""}>USDT</option></select>`;
+          const aportesChips=aportesArr.length?`<div class="aportes-list">`+aportesArr.map(a=>`<span class="aporte-chip">${MONTHS[a.m].slice(0,3)}: ${a.cur==="ARS"?fa(a.monto):fmt(a.monto,a.cur)} <button onclick="delAporte(${g.id},${a.id})" title="Quitar aporte">✕</button></span>`).join("")+`</div>`:"";
           return`<div class="goal-card">
             <div class="goal-head">
               <input class="goal-name" value="${(g.nombre||"").replace(/"/g,"&quot;")}" onchange="setSavGoalField(${g.id},'nombre',this.value)">
@@ -1890,7 +1921,14 @@ function render(){
             <div class="goal-pct" style="color:${col}">${pc}% · ${f(totalAct)}</div>
             <div class="goal-row"><label>Ahorrado base</label>${cpH(gc,`setSavGoalField(${g.id},'cur',this.value)`)}<input class="goal-inp" type="number" value="${act||""}" placeholder="0" onchange="setSavGoalField(${g.id},'actual',this.value)"></div>
             <div class="goal-row"><label>Objetivo</label><input class="goal-inp" type="number" value="${obj||""}" placeholder="0" onchange="setSavGoalField(${g.id},'objetivo',this.value)" style="margin-left:auto"></div>
+            <div class="goal-aporte">
+              <input class="goal-inp" type="number" id="ap-monto-${g.id}" placeholder="Aportar" style="width:84px">
+              ${apCur}
+              <button class="tx-add-btn" onclick="addAporte(${g.id},document.getElementById('ap-monto-${g.id}').value,document.getElementById('ap-cur-${g.id}').value)" title="Resta del balance de ${MONTHS[activeMonth]} en Movimientos">💰 Aportar a ${MONTHS[activeMonth].slice(0,3)}</button>
+            </div>
+            ${aportesChips}
             ${derivado!==0?`<div class="goal-foot" style="color:${col}">📥 Derivado de ${asignados.length} mes${asignados.length!==1?"es":""}: ${f(derivado)}</div>`:""}
+            ${aportado!==0?`<div class="goal-foot" style="color:${col}">💰 Aportes manuales: ${f(aportado)} (${aportesArr.length})</div>`:""}
             <div class="goal-foot">${f(totalAct)} de ${f(obj)} ${obj>totalAct?`· faltan ${f(obj-totalAct)}`:obj>0?"· ✅ ¡Completada!":""}</div>
           </div>`;
         }).join("");
