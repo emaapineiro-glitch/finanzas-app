@@ -1754,7 +1754,7 @@ function render(){
   if(curTab==="mov"){
     const minis=MONTHS.map((m,i)=>{const v=movMes[i];const c=v<0?"neg":v>0?"pos":"zero";const sel=i===activeMonth?"sel":"";
       const byCur=movRawByCur[i]||{};
-      const curLines=Object.entries(byCur).filter(([cc,a])=>cc!=="ARS"&&a!==0).map(([cc,a])=>`<div style="font-size:9px;color:var(--text3);white-space:nowrap">${cc} ${fmt(a,cc)}<span style="color:var(--text3)"> = ${fa(toARS(a,cc))}</span></div>`).join("");
+      const curLines=Object.entries(byCur).filter(([cc,a])=>cc!=="ARS"&&a!==0).map(([cc,a])=>`<div style="font-size:9px;color:var(--text3);white-space:normal;line-height:1.2;word-break:break-word">${fmt(a,cc)} = ${fa(toARS(a,cc))}</div>`).join("");
       return`<div class="mm ${c} ${sel}" onclick="setActiveMonth(${i})"><div class="ml">${m.slice(0,3)}</div><div class="mv">${fa(v)}</div>${curLines}</div>`;}).join("");
     // Fila fija: Mi parte de alquileres
     const miParteCells=MONTHS.map((_,m)=>{const v=netoMio[m];const mc=mCls(m);return`<td class="num${mc?" "+mc:""}"><span class="nd ${vc(v)}" style="pointer-events:none">${v===0?"—":fa(v)}</span></td>`;}).join("");
