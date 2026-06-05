@@ -2076,12 +2076,8 @@ function pushToFirebase(){
        .catch(e=>{ fbSyncing=false; console.warn("Firebase push error:",e); });
 }
 
-// Hook pushToFirebase into the save cycle
-const _origSaveNow=saveNow;
-function saveNow(){
-  _origSaveNow();
-  if(fbConnected) pushToFirebase();
-}
+// (Sincronización Firebase manual deshabilitada — ahora se usa Auth multiusuario.
+//  Se eliminó el wrapper duplicado de saveNow que causaba recursión infinita.)
 
 // Auto-init Firebase on load if config exists
 document.addEventListener("DOMContentLoaded",()=>{
@@ -2225,7 +2221,9 @@ function applyCloudState(parsed){
   if(parsed.currentYear!==undefined) state.currentYear=parsed.currentYear;
   if(parsed.fx) state.fx={...state.fx,...parsed.fx};
   if(parsed.tabOrder) state.tabOrder=parsed.tabOrder;
-  state.alqEnabled=parsed.alqEnabled; // undefined(=visible) o false(oculta)
+  // alqEnabled explícito; si falta, se infiere de si tabOrder incluye "alq"
+  state.alqEnabled = parsed.alqEnabled!==undefined ? parsed.alqEnabled
+                     : (parsed.tabOrder ? parsed.tabOrder.includes("alq") : true);
   state._ts=parsed._ts||0;
 }
 
@@ -2271,7 +2269,7 @@ function cloudPush(){
   authDb.ref("users/"+currentUid+"/state").set(JSON.stringify(state))
     .then(()=>{cloudSyncing=false;}).catch(()=>{cloudSyncing=false;});
 }
-function scheduleCloudPush(){clearTimeout(cloudPushTimer);cloudPushTimer=setTimeout(cloudPush,800);}
+function scheduleCloudPush(){clearTimeout(cloudPushTimer);cloudPushTimer=setTimeout(cloudPush,400);}
 
 function makeUserTemplate(){
   return {currentYear:TODAY_YEAR,fx:{USD:state.fx.USD,USDT:state.fx.USDT},years:{[String(TODAY_YEAR)]:makeYD()},tabOrder:["mov","sav","biz","res"],alqEnabled:false,_ts:Date.now()};
@@ -2371,6 +2369,20 @@ async function adminDeleteUserData(uid,email){
   const prev=saveNow;
   saveNow=function(){prev.apply(this,arguments);scheduleCloudPush();};
 })();
+
+/* Guardado de seguridad al cerrar o cambiar de pestaña/app (clave en móvil) */
+function flushSave(){
+  try{
+    if(currentUid&&authDb){
+      state._ts=Date.now();
+      authDb.ref("users/"+currentUid+"/state").set(JSON.stringify(state));
+    }
+    if(typeof saveNow==="function") localStorage.setItem(lsKey(),JSON.stringify(state));
+  }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") flushSave(); });
+window.addEventListener("pagehide",flushSave);
+window.addEventListener("beforeunload",flushSave);
 
 document.addEventListener("DOMContentLoaded",authInit);
 if(document.readyState!=="loading") authInit();
