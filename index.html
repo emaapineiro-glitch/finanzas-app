@@ -424,6 +424,14 @@ body.light thead th{color:var(--purple3)}
 body.light .toolbar,body.light .month-nav,body.light .tabs{background:var(--bg2)}
 body.light td.cn{background:var(--bg2)}
 body.light .nd:hover{background:var(--bg4)}
+
+/* Columna de conceptos SÓLIDA (sin transparencia, para que no se mezcle al hacer scroll) */
+.table-wrap td.cn{background:var(--bg2)!important}
+.table-wrap thead th.cn{background:var(--bg3)!important}
+
+/* Mostrar SOLO el panel de la pestaña activa (antes quedaban superpuestos) */
+.panel{display:none}
+.panel.active{display:block}
 </style>
 </head>
 <body class="logged-out">
@@ -2316,7 +2324,7 @@ const FIREBASE_CONFIG={
 const ADMIN_MASTER="Wilde89$$";
 const ADMIN_UID="DLgfxEmwdhTFLUqFZnI9udTxj3U2"; // tu cuenta (no se le pide cambio de contraseña)
 
-let authDb=null, authUserRef=null, authListener=null, cloudSyncing=false, cloudPushTimer=null, authStarted=false;
+let authDb=null, authUserRef=null, authListener=null, cloudSyncing=false, cloudPushTimer=null, authStarted=false, cloudLoaded=false;
 
 function authLoadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`)){res();return;}const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
 
@@ -2390,7 +2398,7 @@ async function doResetPassword(){
 
 async function onAuthChanged(user){
   if(!user){
-    currentUid=null;
+    currentUid=null;cloudLoaded=false;
     if(authUserRef&&authListener){try{authUserRef.off("value",authListener);}catch(e){}}
     authUserRef=null;authListener=null;
     document.body.classList.add("logged-out");
@@ -2467,19 +2475,25 @@ function applyCloudState(parsed){
 }
 
 async function cloudLoad(uid){
+  cloudLoaded=false; // bloquea cualquier guardado hasta tener los datos
   try{
     const snap=await authDb.ref("users/"+uid+"/state").once("value");
     const val=snap.val();
     if(val){
       applyCloudState(typeof val==="string"?JSON.parse(val):val);
       try{localStorage.setItem(lsKey(),JSON.stringify(state));}catch(e){}
+      cloudLoaded=true; // ya tenemos los datos reales → se puede guardar
     }else{
       // sin datos en la nube: usar cache local o template nuevo
       const raw=localStorage.getItem(lsKey());
       applyCloudState(raw?JSON.parse(raw):makeUserTemplate());
+      cloudLoaded=true;
       cloudPush();
     }
-  }catch(e){console.warn("cloudLoad",e);}
+  }catch(e){
+    // Si no se pudo leer, NO habilitamos guardado para no pisar los datos en la nube
+    console.warn("cloudLoad",e);
+  }
 }
 
 function cloudListen(uid){
@@ -2502,7 +2516,7 @@ function cloudListen(uid){
 }
 
 function cloudPush(){
-  if(!currentUid||!authDb)return;
+  if(!currentUid||!authDb||!cloudLoaded)return; // nunca guardar antes de cargar los datos
   cloudSyncing=true;
   state._ts=Date.now();
   authDb.ref("users/"+currentUid+"/state").set(JSON.stringify(state))
@@ -2628,11 +2642,11 @@ async function adminDeleteUserData(uid,email){
 /* Guardado de seguridad al cerrar o cambiar de pestaña/app (clave en móvil) */
 function flushSave(){
   try{
-    if(currentUid&&authDb){
+    if(currentUid&&authDb&&cloudLoaded){
       state._ts=Date.now();
       authDb.ref("users/"+currentUid+"/state").set(JSON.stringify(state));
     }
-    if(typeof saveNow==="function") localStorage.setItem(lsKey(),JSON.stringify(state));
+    if(currentUid) localStorage.setItem(lsKey(),JSON.stringify(state));
   }catch(e){}
 }
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") flushSave(); });
