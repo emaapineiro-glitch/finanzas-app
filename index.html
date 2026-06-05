@@ -959,7 +959,16 @@ function setCur(type,id,m,cur){
   if(type==="alq"){if(!yd.alqC[id])yd.alqC[id]=Array(12).fill("ARS");yd.alqC[id][m]=cur;}
   if(type==="gas"){if(!yd.gasC[id])yd.gasC[id]=Array(12).fill("ARS");yd.gasC[id][m]=cur;}
   if(type==="imp"){yd.impC[m]=cur;}
-  if(type==="mov"){const r=yd.movRows.find(x=>x.id==id);if(r){if(!r.currency)r.currency=Array(12).fill("ARS");r.currency[m]=cur;}}
+  if(type==="mov"){
+    const r=yd.movRows.find(x=>x.id==id);
+    if(r){
+      if(!r.currency)r.currency=Array(12).fill("ARS");
+      r.currency[m]=cur;
+      // Actualizar también la moneda de las transacciones ya cargadas en ese mes
+      if(r.txs&&r.txs[m]&&r.txs[m].length) r.txs[m].forEach(t=>{t.currency=cur;});
+      if(r.valores) r.valores[m]=(r.txs?.[m]||[]).reduce((a,t)=>a+toARS(Number(t.monto)||0,t.currency||cur),0);
+    }
+  }
   snap(`Moneda → ${cur}`);schedSave();render();
 }
 function setSavCur(m,cur){
