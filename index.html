@@ -585,9 +585,9 @@ body.light .nd:hover{background:var(--bg4)}
   <div class="vmodal">
     <div class="vmodal-handle"></div>
     <div class="vmodal-title">🎤 Registrar por voz</div>
-    <div class="vmodal-sub">Hablá naturalmente. La IA interpreta el movimiento y lo ubica donde corresponde.</div>
+    <div class="vmodal-sub">Hablá naturalmente (ej: "gasté 500 pesos en nafta") y lo cargo directo a Movimientos.</div>
 
-    <div class="apikey-row">
+    <div class="apikey-row" style="display:none">
       <label>🔑 API Key Claude:</label>
       <input class="apikey-inp" id="apikey-inp" type="password" placeholder="sk-ant-..." oninput="saveApiKey(this.value)">
       <span class="apikey-note">Tu clave se guarda solo en este dispositivo. Conseguila en console.anthropic.com</span>
@@ -608,7 +608,7 @@ body.light .nd:hover{background:var(--bg4)}
 
     <div class="vbtn-row" id="vbtn-row">
       <button class="vbtn ghost" id="vbtn-mic" onclick="toggleMic()">🎤 Iniciar</button>
-      <button class="vbtn ghost" onclick="analyzeText()" id="vbtn-analyze" style="display:none">✨ Analizar</button>
+      <button class="vbtn primary" onclick="analyzeText()" id="vbtn-analyze" style="display:none">✅ Cargar movimiento</button>
       <button class="vbtn primary" onclick="applyMovement()" id="vbtn-apply" style="display:none">✅ Aplicar</button>
       <button class="vbtn ghost" onclick="closeVoice()">✕ Cerrar</button>
     </div>
@@ -2157,68 +2157,64 @@ function stopMic(){
 }
 
 // ── AI ANALYSIS ──
-async function analyzeText(){
+// Interpreta el comando localmente (sin API) y lo carga directo
+function analyzeText(){
   const text=finalTranscript.trim();
-  if(!text){toast("No hay texto para analizar","tundo");return;}
-  const apiKey=loadApiKey()||document.getElementById("apikey-inp").value.trim();
-  if(!apiKey){toast("Ingresá tu API Key de Claude para usar esta función","tundo");return;}
-  voiceState="processing";
-  setWave("processing");
-  document.getElementById("vbtn-analyze").disabled=true;
-  document.getElementById("vbtn-analyze").textContent="⏳ Analizando…";
-  document.getElementById("voice-fab").className="voice-fab processing";
-
-  const yd=getYD();
-  const monthNames=MONTHS.join(", ");
-  const currentMonthName=MONTHS[activeMonth];
-  const currentYear=state.currentYear;
-  const dptoNames=yd.dptos.map(d=>d.nombre).join(", ")||"ninguno";
-  const movNames=yd.movRows.map(r=>r.nombre).join(", ")||"ninguno";
-  const bizNames=(yd.negocios||[]).map(b=>b.nombre).join(", ")||"ninguno";
-
-  const systemPrompt=`Sos un asistente financiero. El usuario describe un movimiento de dinero en lenguaje natural y vos lo interpretás.
-Contexto del sistema financiero:
-- Año actual: ${currentYear}
-- Mes activo: ${currentMonthName} (índice ${activeMonth})
-- Meses disponibles: ${monthNames}
-- Departamentos/propiedades: ${dptoNames}
-- Movimientos registrados: ${movNames}
-- Negocios: ${bizNames}
-
-Respondé ÚNICAMENTE con un objeto JSON válido (sin markdown, sin explicaciones extra) con esta estructura exacta:
-{
-  "tipo": "movimiento" | "alquiler_ingreso" | "alquiler_gasto" | "ahorro" | "negocio_ingreso" | "negocio_gasto",
-  "descripcion": "descripción breve del movimiento",
-  "monto": número (siempre positivo),
-  "moneda": "ARS" | "USD" | "USDT",
-  "mes": número entre 0 y 11,
-  "signo": "ingreso" | "egreso",
-  "destino_nombre": "nombre de la fila o concepto donde aplicar (puede ser nuevo)",
-  "destino_dpto": "nombre del departamento si aplica, o null",
-  "destino_negocio": "nombre del negocio si aplica, o null",
-  "confianza": "alta" | "media" | "baja",
-  "nota": "observación breve si es necesario"
-}`;
-
-  try{
-    const resp=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,system:systemPrompt,messages:[{role:"user",content:text}]})
-    });
-    if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||resp.statusText);}
-    const data=await resp.json();
-    const raw=data.content[0].text.trim().replace(/```json|```/g,"").trim();
-    pendingMovement=JSON.parse(raw);
-    renderAIResult(pendingMovement);
-  }catch(err){
-    toast("Error al analizar: "+err.message,"tundo");
-  }finally{
-    voiceState="idle";setWave("idle");
-    document.getElementById("voice-fab").className="voice-fab";
-    document.getElementById("vbtn-analyze").disabled=false;
-    document.getElementById("vbtn-analyze").textContent="✨ Analizar";
+  if(!text){toast("No hay texto para cargar","tundo");return;}
+  const p=parseVoiceLocal(text);
+  if(!p.monto){toast("🤔 No entendí el monto. Probá: 'gasté 500 pesos en nafta'.","tundo");return;}
+  applyVoiceLocal(p);
+}
+function parseMontoEs(t){
+  t=t.replace(/\./g,"").replace(/,/g,".");
+  let m;
+  m=t.match(/(\d+(?:\.\d+)?)\s*mill[oó]n(?:es)?/); if(m) return parseFloat(m[1])*1000000;
+  m=t.match(/(\d+(?:\.\d+)?)\s*mil/);              if(m) return parseFloat(m[1])*1000;
+  if(/\bmil\b/.test(t)&&!/\d/.test(t)) return 1000;
+  m=t.match(/(\d+(?:\.\d+)?)/);                    if(m) return parseFloat(m[1]);
+  return 0;
+}
+function parseVoiceLocal(text){
+  const t=text.toLowerCase();
+  const esAhorro=/\bahorr|para ahorros?|a ahorros?\b/.test(t);
+  let signo="egreso";
+  if(/\b(cobr|recib|ingres|gan[eé]|me pagaron|entr[oó]|deposit|sum[eé])/.test(t)||esAhorro) signo="ingreso";
+  if(/\b(gast|pagu|compr|abon)/.test(t)) signo="egreso";
+  let moneda="ARS";
+  if(/\busdt\b|tether/.test(t)) moneda="USDT";
+  else if(/d[oó]lar|\busd\b/.test(t)) moneda="USD";
+  const monto=parseMontoEs(t);
+  let mes=activeMonth;
+  MONTHS.forEach((mm,idx)=>{ if(t.includes(mm.toLowerCase())) mes=idx; });
+  let desc="";
+  const parts=text.split(/\s+en\s+/i);
+  if(parts.length>1) desc=parts[parts.length-1];
+  else { const mm=text.match(/\b(?:de|por|para)\s+(.+)$/i); desc=mm?mm[1]:text; }
+  desc=desc.replace(/\b\d[\d.,]*\b/g,"").replace(/\b(pesos?|d[oó]lares?|usdt|usd|tether|mil|mill[oó]n(?:es)?|este mes|el mes|del|de)\b/gi,"");
+  MONTHS.forEach(mm=>{ desc=desc.replace(new RegExp("\\b"+mm+"\\b","gi"),""); });
+  desc=desc.replace(/\s{2,}/g," ").trim().replace(/^[,.\s]+|[,.\s]+$/g,"");
+  if(!desc) desc=esAhorro?"Ahorro":(signo==="egreso"?"Gasto":"Ingreso");
+  return {signo,moneda,monto:Math.abs(monto),mes,desc,esAhorro};
+}
+function applyVoiceLocal(p){
+  const yd=getYD();const cur=p.moneda;const m=p.mes;
+  if(p.esAhorro){
+    if(!yd.savExtra)yd.savExtra={ARS:Array(12).fill(0),USD:Array(12).fill(0),USDT:Array(12).fill(0)};
+    yd.savExtra[cur][m]=(Number(yd.savExtra[cur]?.[m])||0)+p.monto;
+    snap("🎤 Ahorro: "+p.desc);schedSave();curTab="sav";render();
+    toast(`✅ Ahorro de ${fmt(p.monto,cur)} en ${MONTHS[m]}`,"tok");
+    closeVoice();return;
   }
+  const signed=(p.signo==="egreso"?-1:1)*p.monto;
+  let row=yd.movRows.find(r=>/por voz/i.test(r.nombre||""));
+  if(!row){ row={id:Date.now(),nombre:"🎤 Por voz",txs:Array(12).fill(null).map(()=>[]),valores:Array(12).fill(0),currency:Array(12).fill("ARS")}; yd.movRows.push(row); }
+  migrateRow(row);
+  addTx(row.id,m,signed,cur,p.desc,new Date().toISOString());
+  expandedRows.add(row.id+"_"+m);
+  curTab="mov";
+  snap("🎤 "+p.desc);schedSave();render();
+  toast(`✅ ${p.signo==="egreso"?"Gasto":"Ingreso"} ${fmt(p.monto,cur)} · "${p.desc}" [${MONTHS[m]}]`,"tok");
+  closeVoice();
 }
 
 function renderAIResult(mv){
