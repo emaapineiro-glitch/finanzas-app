@@ -461,6 +461,49 @@ body.light .nd:hover{background:var(--bg4)}
 .panel{display:none}
 .panel.active{display:block}
 
+/* ════════ CAPA DE REFINAMIENTO ESTÉTICO (minimalista) ════════ */
+*{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{background:radial-gradient(1100px 520px at 50% -8%,rgba(124,111,239,0.12),transparent 60%),var(--bg)}
+body.light{background:radial-gradient(1100px 520px at 50% -8%,rgba(124,111,239,0.10),transparent 60%),var(--bg)}
+#app{padding-top:20px}
+/* Contenedores: bordes suaves, radios consistentes, sombra sutil */
+.toolbar,.month-nav,.prio-bar,.slider-row,.flow-info,.table-wrap,.cfg-card,.sav-card,.goal-card,.apikey-row,.fx-box,.year-ctrl{
+  border-color:rgba(124,111,239,0.13);
+  box-shadow:0 1px 2px rgba(0,0,0,0.16);
+  border-radius:13px;
+}
+.stat-card{border-radius:15px;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:transform .18s ease,box-shadow .18s ease}
+.stat-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.22)}
+.stat-card::before{opacity:.05}
+.tabs{border-radius:14px;padding:5px;box-shadow:0 1px 2px rgba(0,0,0,.16)}
+.tab-btn{border-radius:11px;transition:all .18s ease}
+.tab-btn.active{box-shadow:none}
+/* Botones con transición suave */
+.tb-btn,.btn-add,.fx-btn,.vbtn,.tx-add-btn,.mn-today,.month-toggle,.prio-chip,.profile-btn{transition:all .18s ease}
+.btn-add:hover{box-shadow:0 4px 16px rgba(124,111,239,.34)}
+/* Tablas: más aire y separadores livianos */
+thead th{padding:9px 9px;letter-spacing:.4px;border-bottom:1px solid rgba(124,111,239,.16)}
+tr td{border-bottom:1px solid rgba(124,111,239,0.05)}
+/* Inputs: foco con halo suave */
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 2px rgba(124,111,239,.16)}
+/* Metas: barra con leve glow */
+.goal-bar-fill{box-shadow:0 0 8px rgba(124,111,239,.22)}
+.goal-card{transition:transform .18s ease,box-shadow .18s ease}
+.goal-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.2)}
+/* Logo y marca */
+.logo{border-radius:14px}
+.htitle{letter-spacing:.2px}
+/* Scrollbars finos y minimalistas */
+*::-webkit-scrollbar{height:8px;width:8px}
+*::-webkit-scrollbar-thumb{background:rgba(124,111,239,.30);border-radius:8px}
+*::-webkit-scrollbar-thumb:hover{background:rgba(124,111,239,.5)}
+*::-webkit-scrollbar-track{background:transparent}
+/* Pills / chips redondeados parejos */
+.month-pill,.biz-pill,.prio-chip,.bal-chip,.pill,.tx-cur{border-radius:9px}
+/* Modales: un poco más suaves */
+.vmodal{border-radius:22px 22px 0 0}
+.login-card{box-shadow:0 24px 70px rgba(0,0,0,.55)}
+
 /* Pestaña de meses desplegable */
 .month-toggle{display:flex;align-items:center;gap:7px;background:var(--bg4);border:1px solid var(--border2);border-radius:9px;padding:7px 14px;color:var(--text2);font-size:13px;cursor:pointer}
 .month-toggle:hover{border-color:var(--purple)}
