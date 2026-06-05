@@ -258,6 +258,8 @@ td.cn .row-label{display:flex;align-items:center;gap:2px}
 .tx-add-row input,.tx-add-row select{font-size:11px;padding:4px 7px;border-radius:6px;border:1px solid var(--border2);background:var(--bg4);color:var(--text1);outline:none}
 .tx-add-row input:focus,.tx-add-row select:focus{border-color:var(--purple)}
 .tx-add-row input[type=number]{width:100px;text-align:right}
+.tx-tipo-badge{font-size:10px;font-weight:700;white-space:nowrap;min-width:74px}
+.tx-tipo-sel{font-weight:700}
 .tx-add-btn{font-size:11px;padding:4px 10px;border-radius:6px;border:none;background:var(--purple);color:#fff;cursor:pointer;font-weight:600}
 .tx-add-btn:hover{background:var(--purple2)}
 .tx-empty{font-size:11px;color:var(--text3);font-style:italic}
@@ -1629,8 +1631,10 @@ function render(){
           ?`<div class="tx-empty">Sin transacciones registradas para ${MONTHS[m]}.</div>`
           :txs.map(t=>{
             const color=t.monto<0?"var(--coral2)":"var(--teal2)";
+            const tipo=t.monto<0?"📉 Gasto":"📈 Ingreso";
             return`<div class="tx-item">
               <span class="tx-fecha">📅 ${fmtDateShort(t.fecha)}</span>
+              <span class="tx-tipo-badge" style="color:${color}">${tipo}</span>
               <span class="tx-nota">${t.nota||"—"}</span>
               <span class="tx-monto" style="color:${color}">${fmt(t.monto,t.currency||cur)}</span>
               <span class="tx-cur">${t.currency||cur}</span>
@@ -1648,15 +1652,21 @@ function render(){
               </div>
               <div class="tx-list">${txItems}</div>
               <div class="tx-add-row">
-                <input type="number" id="tx-monto-${r.id}-${m}" placeholder="Monto" step="0.01">
+                <select id="tx-tipo-${r.id}-${m}" class="tx-tipo-sel">
+                  <option value="ing">📈 Ingreso</option>
+                  <option value="gas">📉 Gasto</option>
+                </select>
+                <input type="number" id="tx-monto-${r.id}-${m}" placeholder="Monto" step="0.01" min="0">
                 <select id="tx-cur-${r.id}-${m}">
                   <option value="ARS">ARS</option><option value="USD">USD</option><option value="USDT">USDT</option>
                 </select>
                 <input type="text" id="tx-nota-${r.id}-${m}" placeholder="Descripción (ej: Supermercado)" style="width:180px">
                 <button class="tx-add-btn" onclick="
-                  const m_v=parseFloat(document.getElementById('tx-monto-${r.id}-${m}').value)||0;
+                  const t_v=document.getElementById('tx-tipo-${r.id}-${m}').value;
+                  let m_v=Math.abs(parseFloat(document.getElementById('tx-monto-${r.id}-${m}').value)||0);
+                  if(t_v==='gas') m_v=-m_v;
                   const c_v=document.getElementById('tx-cur-${r.id}-${m}').value;
-                  const n_v=document.getElementById('tx-nota-${r.id}-${m}').value||'Manual';
+                  const n_v=document.getElementById('tx-nota-${r.id}-${m}').value||(t_v==='gas'?'Gasto':'Ingreso');
                   if(!m_v){return;}
                   addTx(${r.id},${m},m_v,c_v,n_v);
                   snap('Agregar tx: '+n_v);schedSave();render();
