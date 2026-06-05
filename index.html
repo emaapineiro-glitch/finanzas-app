@@ -929,8 +929,9 @@ function getVal(id,m,type){
     const r=yd.movRows.find(x=>x.id==id);
     if(!r) return 0;
     const txs=r.txs?.[m]||[];
-    if(txs.length>0) return txs.reduce((a,t)=>a+toARS(t.monto,t.currency||r.currency?.[m]||"ARS"),0);
-    return r.valores?.[m]||0;
+    // Devolver el valor en la MONEDA de la celda (nativa), no en ARS
+    if(txs.length>0) return txs.reduce((a,t)=>a+(Number(t.monto)||0),0);
+    return Number(r.valores?.[m])||0;
   }
   return 0;
 }
@@ -1699,7 +1700,11 @@ function render(){
         const key=r.id+"_"+m;
         const isExp=expandedRows.has(key);
         const mc=mCls(m);
-        const dv=v===0?"—":fa(v);
+        // Mostrar el valor en su MONEDA (nativa). Si hay varias monedas en la celda, mostrar ARS.
+        const curs=[...new Set(txs.map(t=>t.currency||cur))];
+        const oneCur=curs.length<=1?(curs[0]||cur):null;
+        const nativeSum=txs.length?txs.reduce((a,t)=>a+(Number(t.monto)||0),0):(Number(r.valores?.[m])||0);
+        const dv=v===0?"—":(oneCur?fmt(nativeSum,oneCur):fa(v));
         const cc=vc(v);
         return`<td class="num${mc?" "+mc:""}">
           <div style="display:flex;align-items:center;gap:2px;justify-content:flex-end">
