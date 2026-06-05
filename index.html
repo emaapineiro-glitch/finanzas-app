@@ -731,7 +731,7 @@ function makeYD(){
   };
 }
 
-let state={currentYear:2026,fx:{USD:1435,USDT:1432},years:{"2026":makeYD()},tabOrder:["alq","mov","sav","res"]};
+let state={currentYear:2026,fx:{USD:1435,USDT:1432},fxc:{USD:1435,USDT:1432},years:{"2026":makeYD()},tabOrder:["alq","mov","sav","res"]};
 let hist=[],hIdx=-1,editingCell=null,curTab="alq",activeMonth=TODAY_MONTH,activeBiz=null;
 let saveTimer=null,toastTimer=null;
 let currentUid=null;
@@ -785,6 +785,18 @@ function toast(msg,type){clearTimeout(toastTimer);const el=document.getElementBy
 function getYD(){const k=String(state.currentYear);if(!state.years[k])state.years[k]=makeYD();return state.years[k];}
 function toARS(v,c){const n=Number(v)||0;if(c==="USD")return n*state.fx.USD;if(c==="USDT")return n*state.fx.USDT;return n;}
 function fromARS(ars,c){if(c==="USD")return ars/state.fx.USD;if(c==="USDT")return ars/state.fx.USDT;return ars;}
+// Cotización compra/venta por moneda
+function rateVal(c,type){
+  if(c==="ARS")return 1;
+  const venta=Number(state.fx?.[c])||0;
+  const compra=Number(state.fxc?.[c])||venta;
+  return type==="compra"?compra:venta;
+}
+// Conversión de una transacción a ARS usando SU cotización (compra/venta)
+function txARS(t,fallbackCur){
+  const cur=t.currency||fallbackCur||"ARS";
+  return (Number(t.monto)||0)*rateVal(cur,t.rate||"venta");
+}
 
 /* ── CALC ── */
 function calc(){
@@ -818,10 +830,7 @@ function calc(){
       const txs=r.txs?.[m]||[];
       if(txs.length>0){
         // Each tx has its own currency — always use it, fallback chain: tx.currency → row default → ARS
-        s+=txs.reduce((a,t)=>{
-          const cur=t.currency||r.currency?.[m]||"ARS";
-          return a+toARS(Number(t.monto)||0, cur);
-        },0);
+        s+=txs.reduce((a,t)=>a+txARS(t, r.currency?.[m]||"ARS"),0);
       } else {
         // Legacy: single value per month
         const cur=r.currency?.[m]||"ARS";
@@ -909,7 +918,7 @@ function calc(){
       if(r.esAutoGastos)return;
       const txs=r.txs?.[m]||[];
       if(txs.length>0){
-        txs.forEach(t=>{ const cur=t.currency||r.currency?.[m]||"ARS"; addFlow(toARS(Number(t.monto)||0,cur),cur); });
+        txs.forEach(t=>{ const cur=t.currency||r.currency?.[m]||"ARS"; addFlow(txARS(t,cur),cur); });
       }else{
         const cur=r.currency?.[m]||"ARS"; addFlow(toARS(Number(r.valores?.[m])||0,cur),cur);
       }
@@ -1021,7 +1030,7 @@ function setCur(type,id,m,cur){
       r.currency[m]=cur;
       // Actualizar también la moneda de las transacciones ya cargadas en ese mes
       if(r.txs&&r.txs[m]&&r.txs[m].length) r.txs[m].forEach(t=>{t.currency=cur;});
-      if(r.valores) r.valores[m]=(r.txs?.[m]||[]).reduce((a,t)=>a+toARS(Number(t.monto)||0,t.currency||cur),0);
+      if(r.valores) r.valores[m]=(r.txs?.[m]||[]).reduce((a,t)=>a+txARS(t,cur),0);
     }
   }
   snap(`Moneda → ${cur}`);schedSave();render();
@@ -1187,8 +1196,9 @@ async function fetchFX(){
     const data=await r.json();
     const blue=data.find(d=>d.casa==="blue"||d.nombre?.toLowerCase().includes("blue"));
     const cripto=data.find(d=>d.casa==="cripto"||d.nombre?.toLowerCase().includes("cripto"));
-    if(blue){state.fx.USD=blue.venta||blue.compra||1435;}
-    if(cripto){state.fx.USDT=cripto.venta||cripto.compra||1432;}
+    if(!state.fxc)state.fxc={USD:1435,USDT:1432};
+    if(blue){state.fx.USD=blue.venta||blue.compra||1435;state.fxc.USD=blue.compra||blue.venta||state.fx.USD;}
+    if(cripto){state.fx.USDT=cripto.venta||cripto.compra||1432;state.fxc.USDT=cripto.compra||cripto.venta||state.fx.USDT;}
     const rnd=n=>Math.round(Number(n)||0).toLocaleString("es-AR");
     const cvHtml=(o)=>`<span class="c">C ${rnd(o.compra)}</span> · <span class="v">V ${rnd(o.venta)}</span>`;
     if(blue){const el=document.getElementById("fx-usd-cv");if(el)el.innerHTML=cvHtml(blue);}
@@ -1217,6 +1227,7 @@ function loadLS(){
     if(saved.years)       state.years=saved.years;
     if(saved.currentYear!==undefined) state.currentYear=saved.currentYear;
     if(saved.fx)          state.fx={...state.fx,...saved.fx};
+    if(saved.fxc)         state.fxc={...state.fxc,...saved.fxc};
     console.log("✅ Datos cargados desde localStorage");
     return true;
   }catch(e){console.warn("loadLS error:",e);}
@@ -1255,15 +1266,16 @@ document.addEventListener("input", e=>{
 /* ── TRANSACTION HELPERS ── */
 let expandedRows=new Set(); // rowId_month keys
 
-function addTx(rowId, m, monto, currency, nota, fecha){
+function addTx(rowId, m, monto, currency, nota, fecha, rate){
   const yd=getYD();
   const r=yd.movRows.find(x=>x.id==rowId);
   if(!r) return;
   if(!r.txs) r.txs=Array(12).fill(null).map(()=>[]);
   if(!r.txs[m]) r.txs[m]=[];
-  r.txs[m].push({id:Date.now(),monto:Number(monto),currency:currency||r.currency?.[m]||"ARS",nota:nota||"",fecha:fecha||new Date().toISOString()});
+  const cur=currency||r.currency?.[m]||"ARS";
+  r.txs[m].push({id:Date.now(),monto:Number(monto),currency:cur,rate:cur==="ARS"?undefined:(rate||"venta"),nota:nota||"",fecha:fecha||new Date().toISOString()});
   if(!r.valores) r.valores=Array(12).fill(0);
-  r.valores[m]=r.txs[m].reduce((a,t)=>a+toARS(t.monto,t.currency),0);
+  r.valores[m]=r.txs[m].reduce((a,t)=>a+txARS(t,cur),0);
   schedSave(); // always persist after adding a transaction
 }
 
@@ -1273,7 +1285,7 @@ function deleteTx(rowId, m, txId){
   if(!r||!r.txs?.[m]) return;
   r.txs[m]=r.txs[m].filter(t=>t.id!=txId);
   if(!r.valores) r.valores=Array(12).fill(0);
-  r.valores[m]=r.txs[m].reduce((a,t)=>a+toARS(t.monto,t.currency),0);
+  r.valores[m]=r.txs[m].reduce((a,t)=>a+txARS(t,r.currency?.[m]||"ARS"),0);
   snap("Eliminar transacción");schedSave();render();
 }
 
@@ -1300,10 +1312,7 @@ function getRowTotal(r, m){
   migrateRow(r);
   const txs=r.txs?.[m]||[];
   if(txs.length>0){
-    return txs.reduce((a,t)=>{
-      const cur=t.currency||r.currency?.[m]||"ARS";
-      return a+toARS(Number(t.monto)||0, cur);
-    },0);
+    return txs.reduce((a,t)=>a+txARS(t, r.currency?.[m]||"ARS"),0);
   }
   return toARS(Number(r.valores?.[m])||0, r.currency?.[m]||"ARS");
 }
@@ -1813,7 +1822,8 @@ function render(){
               <span class="tx-nota">${t.nota||"—"}</span>
               <span class="tx-monto" style="color:${color}">${fmt(t.monto,t.currency||cur)}</span>
               <span class="tx-cur">${t.currency||cur}</span>
-              <span style="font-size:10px;color:var(--text3)">(${fa(toARS(t.monto,t.currency||cur))} ARS)</span>
+              ${(t.currency&&t.currency!=="ARS")?`<span class="tx-cur" style="color:var(--purple3)">${t.rate==="compra"?"compra":"venta"}</span>`:""}
+              <span style="font-size:10px;color:var(--text3)">(${fa(txARS(t,cur))} ARS)</span>
               <button class="tx-del" onclick="deleteTx(${r.id},${m},${t.id})" title="Eliminar">✕</button>
             </div>`;
           }).join("");
@@ -1835,15 +1845,19 @@ function render(){
                 <select id="tx-cur-${r.id}-${m}">
                   <option value="ARS">ARS</option><option value="USD">USD</option><option value="USDT">USDT</option>
                 </select>
+                <select id="tx-rate-${r.id}-${m}" title="Cotización a usar (solo USD/USDT)">
+                  <option value="venta">💱 Venta</option><option value="compra">💱 Compra</option>
+                </select>
                 <input type="text" id="tx-nota-${r.id}-${m}" placeholder="Descripción (ej: Supermercado)" style="width:180px">
                 <button class="tx-add-btn" onclick="
                   const t_v=document.getElementById('tx-tipo-${r.id}-${m}').value;
                   let m_v=Math.abs(parseFloat(document.getElementById('tx-monto-${r.id}-${m}').value)||0);
                   if(t_v==='gas') m_v=-m_v;
                   const c_v=document.getElementById('tx-cur-${r.id}-${m}').value;
+                  const r_v=document.getElementById('tx-rate-${r.id}-${m}').value;
                   const n_v=document.getElementById('tx-nota-${r.id}-${m}').value||(t_v==='gas'?'Gasto':'Ingreso');
                   if(!m_v){return;}
-                  addTx(${r.id},${m},m_v,c_v,n_v);
+                  addTx(${r.id},${m},m_v,c_v,n_v,null,r_v);
                   snap('Agregar tx: '+n_v);schedSave();render();
                 ">+ Agregar</button>
               </div>
@@ -2501,6 +2515,7 @@ function startFbListener(){
       if(parsed.years)        state.years=parsed.years;
       if(parsed.currentYear!==undefined) state.currentYear=parsed.currentYear;
       if(parsed.fx)           state.fx={...state.fx,...parsed.fx};
+      if(parsed.fxc)          state.fxc={...state.fxc,...parsed.fxc};
       // also persist locally
       try{ localStorage.setItem("fp_app",JSON.stringify(state)); }catch(e){}
       render();
@@ -2705,6 +2720,7 @@ function applyCloudState(parsed){
   if(parsed.years) state.years=parsed.years;
   if(parsed.currentYear!==undefined) state.currentYear=parsed.currentYear;
   if(parsed.fx) state.fx={...state.fx,...parsed.fx};
+  if(parsed.fxc) state.fxc={...state.fxc,...parsed.fxc};
   if(parsed.tabOrder) state.tabOrder=parsed.tabOrder;
   // alqEnabled explícito; si falta, se infiere de si tabOrder incluye "alq"
   state.alqEnabled = parsed.alqEnabled!==undefined ? parsed.alqEnabled
