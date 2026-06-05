@@ -1896,8 +1896,8 @@ function render(){
           ${movMes.map((v,m)=>{
             const mc=mCls(m);
             const byCur=movRawByCur[m]||{};
-            const lines=Object.entries(byCur).filter(([c,a])=>c!=="ARS"&&a!==0).map(([c,a])=>`<div style="font-size:9px;color:var(--text3);white-space:nowrap">${fmt(a,c)} = ${fa(toARS(a,c))}</div>`).join("");
-            return`<td class="tc${mc?" "+mc:""} ${vcl(v)}">${v===0?"—":fa(v)}${lines}</td>`;
+            const lines=Object.entries(byCur).filter(([c,a])=>c!=="ARS"&&a!==0).map(([c,a])=>`<div style="font-size:9px;color:var(--text3);white-space:normal;line-height:1.25">${fmt(a,c)} = ${fa(toARS(a,c))}</div>`).join("");
+            return`<td class="tc${mc?" "+mc:""} ${vcl(v)}" style="white-space:normal">${v===0?"—":fa(v)}${lines}</td>`;
           }).join("")}
           <td class="tc tpu">${fa(movTotal)}</td><td></td></tr>
           <tr class="rb"><td class="cn">Acumulado</td>
@@ -1936,7 +1936,7 @@ function render(){
       const extraUSDT=Number(yd.savExtra?.USDT?.[i])||0;
       const extraShow=c==="USD"?extraUSD:c==="USDT"?extraUSDT:extraARS;
       const bbc=balByCurARS[i]||{};
-      const movCurLines=["USD","USDT"].map(cc=>{const ars=bbc[cc]||0;if(Math.abs(ars)<0.01)return"";const nat=fromARS(ars,cc);return`<div style="font-size:9px;color:var(--text3);white-space:nowrap">${fmt(nat,cc)} = ${fa(ars)}</div>`;}).join("");
+      const movCurLines=["USD","USDT"].map(cc=>{const ars=bbc[cc]||0;if(Math.abs(ars)<0.01)return"";const nat=fromARS(ars,cc);return`<div style="font-size:9px;color:var(--text3);white-space:normal;line-height:1.25">${fmt(nat,cc)} = ${fa(ars)}</div>`;}).join("");
       // Celda "Derivar a meta": elegir meta + modo (Todo/%/Monto) + valor
       const goalsList=yd.savGoals||[];
       const asg=yd.savAssign?.[i];
