@@ -1081,9 +1081,12 @@ function changeYear(d){
   const k=String(state.currentYear);if(!state.years[k])state.years[k]=makeYD();
   snap(`Año → ${state.currentYear}`);schedSave();render();
 }
-function switchTab(t){curTab=t;render();}
-function setActiveMonth(m){activeMonth=m;render();scrollToActive();}
+function switchTab(t){curTab=t;wantScroll=true;render();}
+function setActiveMonth(m){activeMonth=m;wantScroll=true;render();scrollToActive();}
+let wantScroll=false;
 function scrollToActive(){
+  if(!wantScroll) return; // solo centrar cuando se cambia de mes, no al editar datos
+  wantScroll=false;
   setTimeout(()=>{
     // Scroll every table-wrap to show the active month column
     document.querySelectorAll(".table-wrap").forEach(wrap=>{
@@ -1147,8 +1150,8 @@ function loadLS(){
 document.addEventListener("keydown",e=>{
   if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==="z"){e.preventDefault();undo();}
   if((e.ctrlKey||e.metaKey)&&(e.key.toLowerCase()==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();redo();}
-  if(e.key==="ArrowLeft"&&!editingCell){activeMonth=Math.max(0,activeMonth-1);render();scrollToActive();}
-  if(e.key==="ArrowRight"&&!editingCell){activeMonth=Math.min(11,activeMonth+1);render();scrollToActive();}
+  if(e.key==="ArrowLeft"&&!editingCell){activeMonth=Math.max(0,activeMonth-1);wantScroll=true;render();scrollToActive();}
+  if(e.key==="ArrowRight"&&!editingCell){activeMonth=Math.min(11,activeMonth+1);wantScroll=true;render();scrollToActive();}
 });
 
 // ── GLOBAL AUTOSAVE SAFETY NET ─────────────────────────
@@ -2461,6 +2464,7 @@ try{ document.getElementById("apikey-inp").value=loadApiKey(); }catch(e){}
 
 // Auto-set active month to today if current year
 if(state.currentYear===TODAY_YEAR) activeMonth=TODAY_MONTH;
+wantScroll=true;
 render();
 scrollToActive();
 fetchFX();
