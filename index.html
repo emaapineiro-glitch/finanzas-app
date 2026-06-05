@@ -1233,18 +1233,31 @@ async function readResumen(){
 Respondé SOLO un objeto JSON válido, sin markdown:
 {"pagos":[{"mes":<0-11>,"monto":<número positivo>,"moneda":"ARS"|"USD"|"USDT","descripcion":"<breve>"}],"nota":"<observación breve>"}
 Reglas: "mes" es 0=Enero..11=Diciembre del vencimiento. Incluí el total del próximo vencimiento y, si figuran cuotas futuras, una entrada por cada mes futuro. Montos siempre positivos. Si no podés leerlo, devolvé {"pagos":[],"nota":"motivo"}.`;
+  const MODELOS=["claude-3-5-sonnet-latest","claude-3-5-sonnet-20241022","claude-sonnet-4-20250514","claude-3-7-sonnet-latest","claude-3-5-haiku-latest"];
+  const body=(model)=>JSON.stringify({model,max_tokens:1500,system:sys,messages:[{role:"user",content:[sourceBlock,{type:"text",text:"Leé este resumen de tarjeta y devolvé el JSON de pagos por mes."}]}]});
+  let lastErr="";
   try{
-    const resp=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,system:sys,messages:[{role:"user",content:[sourceBlock,{type:"text",text:"Leé este resumen de tarjeta y devolvé el JSON de pagos por mes."}]}]})
-    });
-    if(!resp.ok){let e={};try{e=await resp.json();}catch(x){}throw new Error(e.error?.message||resp.statusText);}
-    const data=await resp.json();
-    const raw=(data.content?.[0]?.text||"").trim().replace(/```json|```/g,"").trim();
-    resumenParsed=JSON.parse(raw);
-    renderResumenResult(resumenParsed);
-    st.textContent="";
+    for(const model of MODELOS){
+      const resp=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:body(model)
+      });
+      if(!resp.ok){
+        let e={};try{e=await resp.json();}catch(x){}
+        const msg=e.error?.message||resp.statusText;
+        if(/model|not_found|404/i.test(msg)){ lastErr=msg; continue; } // probar el siguiente modelo
+        throw new Error(msg);
+      }
+      const data=await resp.json();
+      const raw=(data.content?.[0]?.text||"").trim().replace(/```json|```/g,"").trim();
+      resumenParsed=JSON.parse(raw);
+      renderResumenResult(resumenParsed);
+      st.textContent="";
+      document.getElementById("resumen-read-btn").disabled=false;
+      return;
+    }
+    throw new Error("Ningún modelo de IA disponible para tu cuenta. "+lastErr);
   }catch(err){
     st.style.color="var(--coral2)";st.textContent="❌ "+err.message;
   }finally{
