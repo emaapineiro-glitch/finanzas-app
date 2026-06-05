@@ -242,6 +242,8 @@ tr.drag-over{border-top:2px solid var(--purple)!important}
 td.cn .row-label{display:flex;align-items:center;gap:2px}
 
 /* TRANSACTION ROWS */
+.quick-add-btn{background:rgba(46,196,160,.12);border:1px solid rgba(46,196,160,.35);border-radius:4px;font-size:12px;font-weight:700;line-height:1;padding:1px 6px;cursor:pointer;color:var(--teal2);transition:all .15s}
+.quick-add-btn:hover{background:rgba(46,196,160,.25)}
 .tx-expand-btn{background:none;border:1px solid var(--border);border-radius:4px;font-size:10px;padding:1px 5px;cursor:pointer;color:var(--text3);transition:all .15s;margin-left:4px;white-space:nowrap}
 .tx-expand-btn:hover{border-color:var(--purple);color:var(--purple3)}
 .tx-expand-btn.has-tx{color:var(--purple2);border-color:rgba(124,111,239,.4)}
@@ -1001,6 +1003,30 @@ function startEdit(el,id,m,type){
   inp.onkeydown=e=>{if(e.key==="Enter")inp.blur();if(e.key==="Escape"){editingCell=null;render();}};
   el.parentNode.replaceChild(inp,el);inp.focus();inp.select();
   editingCell={inp,id,m,type};
+}
+/* Sumar rápido: agrega un monto a lo ya cargado en esa celda (mismo item/mes) */
+function startQuickAdd(el,id,m){
+  if(editingCell)finEdit();
+  const r=getYD().movRows.find(x=>x.id==id);if(!r)return;
+  const cur=r.currency?.[m]||"ARS";
+  const inp=document.createElement("input");
+  inp.type="number";inp.className="ne";inp.placeholder="+ sumar";inp.style.width="82px";
+  let done=false;
+  const commit=()=>{
+    if(done)return;done=true;
+    const v=parseFloat(inp.value);
+    if(!isNaN(v)&&v!==0){
+      const existing=getRowTotal(r,m);          // ARS actual de la celda
+      let amt=v;
+      if(v>0&&existing<0) amt=-v;                // acompañar la dirección (si la celda es gasto, suma gasto)
+      addTx(id,m,amt,cur,"Suma rápida",new Date().toISOString());
+      snap("Sumar monto");
+    }
+    render();
+  };
+  inp.onblur=commit;
+  inp.onkeydown=e=>{if(e.key==="Enter")inp.blur();if(e.key==="Escape"){done=true;render();}};
+  el.parentNode.replaceChild(inp,el);inp.focus();
 }
 function finEdit(id,m,type,rawVal){
   if(!editingCell)return;
@@ -1936,6 +1962,7 @@ function render(){
           <div style="display:flex;align-items:center;gap:2px;justify-content:flex-end">
             ${cpH(cur,`setCur('mov',${r.id},${m},this.value)`)}
             <span class="nd ${cc}" onclick="startEdit(this,'${r.id}',${m},'mov')">${dv}</span>
+            <button class="quick-add-btn" onclick="startQuickAdd(this,'${r.id}',${m})" title="Sumar un monto a este mes">+</button>
             <button class="tx-expand-btn${txCount>0?" has-tx":""}" onclick="toggleExpand(${r.id},${m})" title="${isExp?"Cerrar historial":"Ver historial"}">${isExp?"▲":"▼"}${txCount>0?`<span class="tx-count">${txCount}</span>`:""}</button>
           </div>
         </td>`;
