@@ -350,6 +350,31 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
 .login-foot a{color:var(--text3);text-decoration:none}
 .login-foot a:hover{color:var(--purple3)}
 #admin-modal-bg{z-index:2500}
+
+/* ── MEJORAS MÓVIL ── */
+@media(max-width:600px){
+  #app{padding:12px 10px 80px}
+  .header{margin-bottom:10px}
+  .htitle{font-size:18px}
+  .hsub{display:none}
+  .hcontrols{width:100%}
+  .fx-box{flex:1;justify-content:space-between}
+  /* Barra de usuario + Salir: fila propia, prolija */
+  #auth-toolbar{margin-left:0!important;width:100%;justify-content:flex-end;gap:8px;order:-1;border-bottom:1px solid var(--border);padding-bottom:7px;margin-bottom:3px}
+  #auth-toolbar span{max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Meses tipo calendario 4×3 */
+  .month-nav{flex-direction:column;align-items:stretch;padding:9px 10px;gap:8px}
+  .mn-label{display:none}
+  .month-nav-center{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .month-nav-center .mn-btn{display:none}
+  .month-pill{padding:9px 0;text-align:center;font-size:12.5px}
+  .mn-today{align-self:center;width:100%;padding:8px}
+  /* Pestañas y tarjetas */
+  .tabs{gap:2px;padding:3px}
+  .tab-btn{font-size:11px;padding:8px 2px}
+  .stat-grid{grid-template-columns:1fr 1fr;gap:7px}
+  .sv{font-size:15px}
+}
 </style>
 </head>
 <body class="logged-out">
@@ -1321,15 +1346,15 @@ function render(){
   document.getElementById("year-display").textContent=state.currentYear;
   document.getElementById("fx-usd").value=Math.round(state.fx.USD);
   document.getElementById("fx-usdt").value=Math.round(state.fx.USDT);
-  ["alq","mov","sav","biz","res"].forEach(t=>{
-    document.getElementById("tab-"+t).className="panel"+(curTab===t?" active":"");
-  });
-  // Render tabs dynamically with drag-and-drop reordering
+  // Determinar pestañas visibles y CORREGIR la pestaña activa ANTES de pintar paneles
   const TAB_DEFS={alq:{label:"🏢 Alquileres"},mov:{label:"💳 Movimientos"},sav:{label:"🏦 Ahorros"},biz:{label:"💼 Negocios"},res:{label:"📊 Resumen"}};
   const alqOn=state.alqEnabled!==false; // undefined o true => visible; solo false la oculta
   let tabOrder=(state.tabOrder||["alq","mov","sav","biz","res"]).filter(t=>TAB_DEFS[t]&&(t!=="alq"||alqOn));
   if(alqOn&&!tabOrder.includes("alq")) tabOrder.unshift("alq");
   if(!tabOrder.includes(curTab)) curTab=tabOrder[0]||"mov";
+  ["alq","mov","sav","biz","res"].forEach(t=>{
+    document.getElementById("tab-"+t).className="panel"+(curTab===t?" active":"");
+  });
   document.querySelector(".tabs").innerHTML=tabOrder.map(t=>`<button class="tab-btn${curTab===t?" active":""}" data-tab="${t}" draggable="true" ondragstart="tabDragStart(event,'${t}')" ondragend="tabDragEnd(event)" ondragover="tabDragOver(event,'${t}')" ondrop="tabDrop(event,'${t}')" onclick="switchTab('${t}')">${TAB_DEFS[t].label}</button>`).join("");
   renderMonthNav();
 
