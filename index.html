@@ -350,6 +350,7 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
 .login-foot a{color:var(--text3);text-decoration:none}
 .login-foot a:hover{color:var(--purple3)}
 #admin-modal-bg{z-index:2500}
+#pwchange-modal-bg{z-index:2600}
 
 /* ── MEJORAS MÓVIL ── */
 @media(max-width:600px){
@@ -547,6 +548,18 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
       <div class="vmodal-sub" style="color:var(--purple3);font-weight:600">👥 Usuarios</div>
       <div id="admin-user-list" style="font-size:12px"></div>
     </div>
+  </div>
+</div>
+<!-- PASSWORD CHANGE MODAL (primer ingreso) -->
+<div class="vmodal-bg" id="pwchange-modal-bg">
+  <div class="vmodal" style="max-width:420px">
+    <div class="vmodal-handle"></div>
+    <div class="vmodal-title">🔐 Cambiá tu contraseña</div>
+    <div class="vmodal-sub">Es tu primer ingreso. Elegí una contraseña nueva, personal y secreta.</div>
+    <input class="apikey-inp" id="pw-new" type="password" placeholder="Nueva contraseña (mín. 6)" style="width:100%;margin-bottom:8px">
+    <input class="apikey-inp" id="pw-new2" type="password" placeholder="Repetir contraseña" style="width:100%;margin-bottom:10px" onkeydown="if(event.key==='Enter')doChangePassword()">
+    <div class="vbtn-row"><button class="vbtn primary" onclick="doChangePassword()">Cambiar contraseña</button><button class="vbtn ghost" onclick="skipPwChange()">Más tarde</button></div>
+    <div id="pw-msg" style="margin-top:8px;font-size:12px;color:var(--coral2);text-align:center;min-height:16px"></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -1051,13 +1064,40 @@ function tabDragOver(e,t){e.preventDefault();e.dataTransfer.dropEffect="move";do
 function tabDrop(e,t){
   e.preventDefault();
   document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("drag-over"));
-  if(!tabDragSrc||tabDragSrc===t)return;
+  reorderTab(tabDragSrc,t);tabDragSrc=null;
+}
+function reorderTab(src,target){
+  if(!src||src===target)return;
   const order=state.tabOrder||["alq","mov","sav","biz","res"];
-  const fi=order.indexOf(tabDragSrc),ti=order.indexOf(t);
+  const fi=order.indexOf(src),ti=order.indexOf(target);
   if(fi<0||ti<0)return;
-  order.splice(fi,1);order.splice(ti,0,tabDragSrc);
-  state.tabOrder=[...order];tabDragSrc=null;
-  schedSave();render();
+  order.splice(fi,1);order.splice(ti,0,src);
+  state.tabOrder=[...order];
+  snap("Reordenar pestañas");schedSave();render();
+}
+/* ── Reordenar pestañas en MÓVIL (táctil) ── */
+let tabTouchSrc=null,tabTouchMoved=false;
+function tabTouchStart(e,t){tabTouchSrc=t;tabTouchMoved=false;}
+function tabTouchMove(e){
+  if(!tabTouchSrc)return;
+  const tch=e.touches&&e.touches[0];if(!tch)return;
+  const el=document.elementFromPoint(tch.clientX,tch.clientY);
+  const btn=el&&el.closest?el.closest(".tab-btn"):null;
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("drag-over"));
+  if(btn&&btn.dataset.tab&&btn.dataset.tab!==tabTouchSrc){
+    btn.classList.add("drag-over");tabTouchMoved=true;
+    try{e.preventDefault();}catch(x){}
+  }
+}
+function tabTouchEnd(e){
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("drag-over"));
+  const src=tabTouchSrc;tabTouchSrc=null;
+  if(!src||!tabTouchMoved)return; // tap normal → lo maneja onclick
+  const tch=e.changedTouches&&e.changedTouches[0];
+  if(!tch)return;
+  const el=document.elementFromPoint(tch.clientX,tch.clientY);
+  const btn=el&&el.closest?el.closest(".tab-btn"):null;
+  if(btn&&btn.dataset.tab&&btn.dataset.tab!==src) reorderTab(src,btn.dataset.tab);
 }
 
 /* ── DRAG & DROP REORDER ───────────────────────── */
@@ -1355,7 +1395,7 @@ function render(){
   ["alq","mov","sav","biz","res"].forEach(t=>{
     document.getElementById("tab-"+t).className="panel"+(curTab===t?" active":"");
   });
-  document.querySelector(".tabs").innerHTML=tabOrder.map(t=>`<button class="tab-btn${curTab===t?" active":""}" data-tab="${t}" draggable="true" ondragstart="tabDragStart(event,'${t}')" ondragend="tabDragEnd(event)" ondragover="tabDragOver(event,'${t}')" ondrop="tabDrop(event,'${t}')" onclick="switchTab('${t}')">${TAB_DEFS[t].label}</button>`).join("");
+  document.querySelector(".tabs").innerHTML=tabOrder.map(t=>`<button class="tab-btn${curTab===t?" active":""}" data-tab="${t}" draggable="true" ondragstart="tabDragStart(event,'${t}')" ondragend="tabDragEnd(event)" ondragover="tabDragOver(event,'${t}')" ondrop="tabDrop(event,'${t}')" ontouchstart="tabTouchStart(event,'${t}')" ontouchmove="tabTouchMove(event)" ontouchend="tabTouchEnd(event)" onclick="switchTab('${t}')">${TAB_DEFS[t].label}</button>`).join("");
   renderMonthNav();
 
   const yd=getYD();
@@ -2141,6 +2181,7 @@ const FIREBASE_CONFIG={
 };
 /* ⚠️⚠️ CAMBIÁ ESTA CONTRASEÑA MAESTRA DE ADMIN ⚠️⚠️ */
 const ADMIN_MASTER="Wilde89$$";
+const ADMIN_UID="DLgfxEmwdhTFLUqFZnI9udTxj3U2"; // tu cuenta (no se le pide cambio de contraseña)
 
 let authDb=null, authUserRef=null, authListener=null, cloudSyncing=false, cloudPushTimer=null, authStarted=false;
 
@@ -2224,9 +2265,10 @@ async function onAuthChanged(user){
     return;
   }
   // chequear si la cuenta está deshabilitada
+  let reg=null;
   try{
     const regSnap=await authDb.ref("userRegistry/"+user.uid).once("value");
-    const reg=regSnap.val();
+    reg=regSnap.val();
     if(reg&&reg.disabled){
       await firebase.auth().signOut();
       showLoginError("Tu cuenta está deshabilitada. Contactá al administrador.");
@@ -2239,6 +2281,43 @@ async function onAuthChanged(user){
   renderAuthToolbar(user);
   render();
   cloudListen(user.uid);
+  maybePromptPasswordChange(user.uid, reg);
+}
+
+/* ═══ CAMBIO DE CONTRASEÑA (primer ingreso) ═══ */
+function maybePromptPasswordChange(uid, reg){
+  if(uid===ADMIN_UID) return;                 // a vos no te molesta
+  const must = !reg || reg.mustChangePassword!==false; // undefined/true => pedir una vez
+  if(must) showPwChange();
+}
+function showPwChange(){
+  document.getElementById("pwchange-modal-bg").classList.add("open");
+  document.getElementById("pw-new").value="";
+  document.getElementById("pw-new2").value="";
+  document.getElementById("pw-msg").textContent="";
+}
+function closePwChange(){ document.getElementById("pwchange-modal-bg").classList.remove("open"); }
+async function doChangePassword(){
+  const p1=document.getElementById("pw-new").value;
+  const p2=document.getElementById("pw-new2").value;
+  const msg=document.getElementById("pw-msg");
+  if(p1.length<6){msg.textContent="La contraseña debe tener al menos 6 caracteres.";return;}
+  if(p1!==p2){msg.textContent="Las contraseñas no coinciden.";return;}
+  msg.style.color="var(--text3)";msg.textContent="Actualizando…";
+  try{
+    await firebase.auth().currentUser.updatePassword(p1);
+    if(currentUid&&authDb) await authDb.ref("userRegistry/"+currentUid+"/mustChangePassword").set(false);
+    closePwChange();
+    toast("✅ Contraseña actualizada","tok");
+  }catch(e){
+    msg.style.color="var(--coral2)";
+    if(e.code==="auth/requires-recent-login"){ msg.textContent="Por seguridad, cerrá sesión y volvé a entrar para cambiarla."; }
+    else msg.textContent="Error: "+e.message;
+  }
+}
+function skipPwChange(){
+  if(currentUid&&authDb) authDb.ref("userRegistry/"+currentUid+"/mustChangePassword").set(false).catch(()=>{});
+  closePwChange();
 }
 
 function applyCloudState(parsed){
@@ -2344,7 +2423,7 @@ async function adminCreateUser(){
     const uid=cred.user.uid;
     const tmpl=makeUserTemplate();
     if(alq){tmpl.tabOrder=["alq","mov","sav","biz","res"];tmpl.alqEnabled=true;}
-    await secApp.database().ref("userRegistry/"+uid).set({email,name:name||email,disabled:false,createdAt:Date.now(),alqEnabled:alq});
+    await secApp.database().ref("userRegistry/"+uid).set({email,name:name||email,disabled:false,createdAt:Date.now(),alqEnabled:alq,mustChangePassword:true});
     await secApp.database().ref("users/"+uid+"/state").set(JSON.stringify(tmpl));
     await secApp.auth().signOut();
     msg.style.color="var(--teal2)";msg.textContent="✅ Usuario creado: "+email;
