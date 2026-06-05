@@ -994,7 +994,9 @@ function addSavGoal(){
   snap("Agregar meta de ahorro");schedSave();render();
 }
 function delSavGoal(id){
-  const yd=getYD();yd.savGoals=(yd.savGoals||[]).filter(g=>g.id!=id);
+  const yd=getYD();const nm=(yd.savGoals||[]).find(g=>g.id==id)?.nombre||"meta";
+  if(!confirm(`¿Seguro que querés eliminar la meta "${nm}"?`))return;
+  yd.savGoals=(yd.savGoals||[]).filter(g=>g.id!=id);
   snap("Eliminar meta");schedSave();render();
 }
 function setSavGoalField(id,field,val){
@@ -1053,12 +1055,14 @@ function startNameEdit(el,type,id){
 }
 function delDpto(id){
   const yd=getYD();const nm=yd.dptos.find(d=>d.id==id)?.nombre||"dpto";
+  if(!confirm(`¿Seguro que querés eliminar "${nm}"?\n\nSe borran todos sus datos. Esta acción se puede deshacer con ↩.`))return;
   yd.dptos=yd.dptos.filter(d=>d.id!=id);
   delete yd.alq[id];delete yd.gas[id];delete yd.alqC[id];delete yd.gasC[id];
   snap(`Eliminar "${nm}"`);schedSave();render();toast("🗑 "+nm);
 }
 function delMov(id){
   const yd=getYD();const nm=yd.movRows.find(r=>r.id==id)?.nombre||"fila";
+  if(!confirm(`¿Seguro que querés eliminar la fila "${nm}"?\n\nSe borran todos sus movimientos. Se puede deshacer con ↩.`))return;
   yd.movRows=yd.movRows.filter(r=>r.id!=id);
   snap(`Eliminar "${nm}"`);schedSave();render();toast("🗑 "+nm);
 }
@@ -1364,6 +1368,7 @@ function addBizTab(){
 function delBiz(id){
   const yd=getYD();
   const nm=yd.negocios.find(b=>b.id==id)?.nombre||"negocio";
+  if(!confirm(`¿Seguro que querés eliminar el negocio "${nm}"?\n\nSe borran sus ingresos, gastos y socios. Se puede deshacer con ↩.`))return;
   yd.negocios=yd.negocios.filter(b=>b.id!=id);
   if(activeBiz==id)activeBiz=yd.negocios[0]?.id||null;
   if(curTab==="biz_"+id) curTab=yd.negocios[0]?("biz_"+yd.negocios[0].id):"mov";
