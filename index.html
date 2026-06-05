@@ -1336,23 +1336,26 @@ function changeYear(d){
 }
 function switchTab(t){curTab=t;wantScroll=true;render();}
 function setActiveMonth(m){activeMonth=m;wantScroll=true;render();scrollToActive();}
-let wantScroll=false;
+let wantScroll=false,savedScroll={};
 function scrollToActive(){
-  if(!wantScroll) return; // solo centrar cuando se cambia de mes, no al editar datos
-  wantScroll=false;
-  setTimeout(()=>{
-    // Scroll every table-wrap to show the active month column
-    document.querySelectorAll(".table-wrap").forEach(wrap=>{
-      const col=wrap.querySelector(".col-today,.col-active");
-      if(!col) return;
-      const rect=col.getBoundingClientRect();
-      const wRect=wrap.getBoundingClientRect();
-      if(rect.left<wRect.left+10||rect.right>wRect.right-10){
-        // Center the active column
-        wrap.scrollLeft=col.offsetLeft-(wRect.width/2)+(col.offsetWidth/2)-40;
-      }
-    });
-  },80);
+  if(wantScroll){
+    wantScroll=false;
+    setTimeout(()=>{
+      // Centrar la columna del mes activo (solo al navegar)
+      document.querySelectorAll(".table-wrap").forEach(wrap=>{
+        const col=wrap.querySelector(".col-today,.col-active");
+        if(!col) return;
+        const rect=col.getBoundingClientRect();
+        const wRect=wrap.getBoundingClientRect();
+        if(rect.left<wRect.left+10||rect.right>wRect.right-10){
+          wrap.scrollLeft=col.offsetLeft-(wRect.width/2)+(col.offsetWidth/2)-40;
+        }
+      });
+    },80);
+  }else{
+    // Tras editar: mantener la posición de scroll donde estaba (no saltar a enero)
+    Object.entries(savedScroll).forEach(([id,sl])=>{const w=document.getElementById(id);if(w)w.scrollLeft=sl;});
+  }
 }
 function fxChanged(){
   state.fx.USD=parseFloat(document.getElementById("fx-usd").value)||1435;
@@ -1841,6 +1844,8 @@ function renderMonthNav(){
 
 /* ── MAIN RENDER ── */
 function render(){
+  // Guardar la posición de scroll horizontal de las tablas antes de reconstruir
+  savedScroll={};document.querySelectorAll(".table-wrap").forEach(w=>{if(w.id)savedScroll[w.id]=w.scrollLeft;});
   document.getElementById("year-display").textContent=state.currentYear;
   document.getElementById("fx-usd").value=Math.round(state.fx.USD);
   document.getElementById("fx-usdt").value=Math.round(state.fx.USDT);
