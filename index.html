@@ -654,6 +654,7 @@ function makeYD(){
     savExtra:{ARS:Array(12).fill(0),USD:Array(12).fill(0),USDT:Array(12).fill(0)}, // manual extra savings
     savPrev:{ARS:0,USD:0,USDT:0}, // previous/existing savings before this year
     savGoals:[], // metas de ahorro (vacaciones, auto, etc.)
+    savAssign:Array(12).fill(null), // a qué meta se deriva el balance de cada mes
     negocios:[] // list of business objects
   };
 }
@@ -944,6 +945,20 @@ function setSavGoalField(id,field,val){
   const yd=getYD();const g=(yd.savGoals||[]).find(g=>g.id==id);if(!g)return;
   g[field]=(field==="objetivo"||field==="actual")?(Number(val)||0):val;
   snap("Meta de ahorro");schedSave();render();
+}
+function setSavAssign(m,goalId){
+  const yd=getYD();if(!yd.savAssign)yd.savAssign=Array(12).fill(null);
+  if(!goalId){ yd.savAssign[m]=null; }
+  else{
+    const cur=yd.savAssign[m];
+    yd.savAssign[m]=(cur&&cur.goalId==goalId)?cur:{goalId,mode:"total",value:0};
+  }
+  snap("Derivar balance a meta");schedSave();render();
+}
+function setSavAssignField(m,field,val){
+  const yd=getYD();const a=yd.savAssign?.[m];if(!a)return;
+  a[field]=field==="value"?(Number(val)||0):val;
+  snap("Derivación de balance");schedSave();render();
 }
 function startNameEdit(el,type,id){
   const yd=getYD();
@@ -1752,9 +1767,24 @@ function render(){
       const extraShow=c==="USD"?extraUSD:c==="USDT"?extraUSDT:extraARS;
       const movByCur=movRawByCur[i]||{};
       const movCurLines=Object.entries(movByCur).filter(([cc,a])=>cc!=="ARS"&&a!==0).map(([cc,a])=>`<div style="font-size:9px;color:var(--text3);white-space:nowrap">${fmt(a,cc)} = ${fa(toARS(a,cc))}</div>`).join("");
+      // Celda "Derivar a meta": elegir meta + modo (Todo/%/Monto) + valor
+      const goalsList=yd.savGoals||[];
+      const asg=yd.savAssign?.[i];
+      let derivCell;
+      if(goalsList.length===0){
+        derivCell=`<span style="font-size:9px;color:var(--text3)">Creá una meta 🎯</span>`;
+      }else{
+        const goalOpts=`<option value="">— sin derivar</option>`+goalsList.map(g=>`<option value="${g.id}"${asg&&asg.goalId==g.id?" selected":""}>${(g.nombre||"meta")}</option>`).join("");
+        derivCell=`<select class="cp" onchange="setSavAssign(${i},this.value)">${goalOpts}</select>`;
+        if(asg){
+          derivCell+=`<select class="cp" style="margin-left:3px" onchange="setSavAssignField(${i},'mode',this.value)"><option value="total"${asg.mode==="total"?" selected":""}>Todo</option><option value="pct"${asg.mode==="pct"?" selected":""}>%</option><option value="amount"${asg.mode==="amount"?" selected":""}>Monto</option></select>`;
+          if(asg.mode!=="total") derivCell+=`<input class="sav-inp" type="number" value="${asg.value||""}" placeholder="${asg.mode==="pct"?"%":"monto"}" onchange="setSavAssignField(${i},'value',this.value)" style="width:62px;margin-left:3px">`;
+        }
+      }
       return`<tr${i%2?" style='background:rgba(124,111,239,0.025)'":" "}>
         <td class="cn${mc?" "+mc:""}" style="color:${color}">${m}</td>
         <td class="tc${mc?" "+mc:""}" style="color:${bal>=0?"var(--teal2)":"var(--coral2)"}">${fa(bal)}${movCurLines}</td>
+        <td class="tc${mc?" "+mc:""}" style="text-align:left;white-space:nowrap">${derivCell}</td>
         <td class="tc${mc?" "+mc:""}" style="text-align:center">${cpH(c,`setSavCur(${i},this.value)`)}</td>
         <td class="tc${mc?" "+mc:""}" style="color:${color};font-size:12px;white-space:nowrap">
           ${c==="ARS"?fa(balInCur):fmt(balInCur,c)}
@@ -1784,8 +1814,17 @@ function render(){
         const goals=yd.savGoals||[];
         const goalsHtml=goals.map(g=>{
           const obj=Number(g.objetivo)||0,act=Number(g.actual)||0;
-          const pc=obj>0?Math.min(100,Math.round(act/obj*100)):0;
           const gc=g.cur||"ARS";
+          // balance de meses derivados a esta meta (Todo/%/Monto, convertido a la moneda de la meta)
+          const asignados=MONTHS.reduce((acc,_,m)=>(yd.savAssign?.[m]?.goalId==g.id?acc.concat(m):acc),[]);
+          const derivado=asignados.reduce((s,m)=>{
+            const a=yd.savAssign[m];const bal=movMes[m];
+            if(a.mode==="pct") return s+fromARS(bal*(Number(a.value)||0)/100,gc);
+            if(a.mode==="amount") return s+(Number(a.value)||0);
+            return s+fromARS(bal,gc);
+          },0);
+          const totalAct=act+derivado;
+          const pc=obj>0?Math.min(100,Math.max(0,Math.round(totalAct/obj*100))):0;
           const col=gc==="USD"?"var(--amber2)":gc==="USDT"?"var(--blue2)":"var(--teal2)";
           const f=(v)=>gc==="ARS"?fa(v):fmt(v,gc);
           return`<div class="goal-card">
@@ -1794,10 +1833,11 @@ function render(){
               <button class="btn-del" onclick="delSavGoal(${g.id})" title="Eliminar meta">🗑</button>
             </div>
             <div class="goal-bar"><div class="goal-bar-fill" style="width:${pc}%;background:${col}"></div></div>
-            <div class="goal-pct" style="color:${col}">${pc}%</div>
-            <div class="goal-row"><label>Ahorrado</label>${cpH(gc,`setSavGoalField(${g.id},'cur',this.value)`)}<input class="goal-inp" type="number" value="${act||""}" placeholder="0" onchange="setSavGoalField(${g.id},'actual',this.value)"></div>
+            <div class="goal-pct" style="color:${col}">${pc}% · ${f(totalAct)}</div>
+            <div class="goal-row"><label>Ahorrado base</label>${cpH(gc,`setSavGoalField(${g.id},'cur',this.value)`)}<input class="goal-inp" type="number" value="${act||""}" placeholder="0" onchange="setSavGoalField(${g.id},'actual',this.value)"></div>
             <div class="goal-row"><label>Objetivo</label><input class="goal-inp" type="number" value="${obj||""}" placeholder="0" onchange="setSavGoalField(${g.id},'objetivo',this.value)" style="margin-left:auto"></div>
-            <div class="goal-foot">${f(act)} de ${f(obj)} ${obj>act?`· faltan ${f(obj-act)}`:obj>0?"· ✅ ¡Completada!":""}</div>
+            ${derivado!==0?`<div class="goal-foot" style="color:${col}">📥 Derivado de ${asignados.length} mes${asignados.length!==1?"es":""}: ${f(derivado)}</div>`:""}
+            <div class="goal-foot">${f(totalAct)} de ${f(obj)} ${obj>totalAct?`· faltan ${f(obj-totalAct)}`:obj>0?"· ✅ ¡Completada!":""}</div>
           </div>`;
         }).join("");
         return`<div class="sec-title"><div class="stl"><div class="sec-bar"></div><span>🎯 Metas de ahorro</span></div>
@@ -1831,7 +1871,7 @@ function render(){
       <div class="sec-title"><div class="stl"><div class="sec-bar"></div><span>Ahorro por mes</span></div><span style="font-size:10px;color:var(--text3)">💚 Balance del mes = lo que sobró · ✋ Destinado = lo que vos decidís guardar a mano</span></div>
       <div class="table-wrap" id="tw-sav">
         <table><thead><tr>
-          <th class="cn">Mes</th><th>💚 Balance del mes</th><th>Moneda</th><th>En moneda</th><th>✋ Destinado</th><th>Total mes</th><th>Acumulado ARS</th>
+          <th class="cn">Mes</th><th>💚 Balance del mes</th><th>🎯 Derivar a meta</th><th>Moneda</th><th>En moneda</th><th>✋ Destinado</th><th>Total mes</th><th>Acumulado ARS</th>
         </tr></thead><tbody>${savCurRows}</tbody></table></div>`;
     scrollToActive();
   }
