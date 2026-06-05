@@ -412,6 +412,17 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
 .goal-inp:focus{border-color:var(--purple)}
 .goal-foot{font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5}
 
+/* ── PRIORIDAD DE GASTO ── */
+.prio-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:14px}
+.prio-label{font-size:12px;font-weight:600;color:var(--text2)}
+.prio-chips{display:flex;align-items:center;gap:4px}
+.prio-arrow{color:var(--text3);font-size:13px}
+.prio-chip{background:var(--bg4);border:1px solid var(--border2);border-radius:7px;padding:4px 11px;font-size:12px;font-weight:700;cursor:pointer}
+.prio-chip:hover{border-color:var(--purple)}
+.prio-chip.first{border-color:var(--purple);background:rgba(124,111,239,.14);box-shadow:0 0 0 1px var(--purple)}
+.prio-spacer{flex:1;min-width:10px}
+.bal-chip{font-size:12px;font-weight:700;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:3px 9px;margin-left:3px}
+
 /* ── TEMA CLARO ── */
 body.light{
   --bg:#eef0f8;--bg2:#ffffff;--bg3:#f5f6fc;--bg4:#e9ebf6;
@@ -655,6 +666,7 @@ function makeYD(){
     savPrev:{ARS:0,USD:0,USDT:0}, // previous/existing savings before this year
     savGoals:[], // metas de ahorro (vacaciones, auto, etc.)
     savAssign:Array(12).fill(null), // a qué meta se deriva el balance de cada mes
+    curPriority:["ARS","USD","USDT"], // prioridad de gasto entre monedas
     negocios:[] // list of business objects
   };
 }
@@ -821,7 +833,31 @@ function calc(){
     return byCur;
   });
 
-  return{alqMes,gasMes,neto,netoMio,netoTio,movMes,acum,savARS,savUSD,savUSDT,savTot,cumSav,negociosMiParte,movRawByCur};
+  // Prioridad de gasto entre monedas: las salidas (gastos) consumen primero la
+  // moneda de mayor prioridad; al agotarse, pasan a la siguiente.
+  const priority=(yd.curPriority&&yd.curPriority.length===3)?yd.curPriority:["ARS","USD","USDT"];
+  const balByCurARS=MONTHS.map((_,m)=>{
+    const pools={ARS:0,USD:0,USDT:0};
+    let expense=0;
+    const addFlow=(ars,cur)=>{ if(ars>=0) pools[cur]=(pools[cur]||0)+ars; else expense+=-ars; };
+    addFlow(netoMio[m],"ARS");
+    addFlow(negociosMiParte[m],"ARS");
+    yd.movRows.forEach(r=>{
+      if(r.esAutoGastos)return;
+      const txs=r.txs?.[m]||[];
+      if(txs.length>0){
+        txs.forEach(t=>{ const cur=t.currency||r.currency?.[m]||"ARS"; addFlow(toARS(Number(t.monto)||0,cur),cur); });
+      }else{
+        const cur=r.currency?.[m]||"ARS"; addFlow(toARS(Number(r.valores?.[m])||0,cur),cur);
+      }
+    });
+    let rem=expense;
+    priority.forEach(cur=>{ const take=Math.min(pools[cur]||0,rem); pools[cur]=(pools[cur]||0)-take; rem-=take; });
+    if(rem>0){ const last=priority[priority.length-1]; pools[last]=(pools[last]||0)-rem; }
+    return pools; // saldo del mes por moneda, en ARS equivalente
+  });
+
+  return{alqMes,gasMes,neto,netoMio,netoTio,movMes,acum,savARS,savUSD,savUSDT,savTot,cumSav,negociosMiParte,movRawByCur,balByCurARS};
 }
 
 /* ── FORMAT ── */
@@ -959,6 +995,12 @@ function setSavAssignField(m,field,val){
   const yd=getYD();const a=yd.savAssign?.[m];if(!a)return;
   a[field]=field==="value"?(Number(val)||0):val;
   snap("Derivación de balance");schedSave();render();
+}
+function setCurPriorityFront(cur){
+  const yd=getYD();
+  let o=(yd.curPriority&&yd.curPriority.length===3)?yd.curPriority.slice():["ARS","USD","USDT"];
+  o=o.filter(c=>c!==cur); o.unshift(cur);
+  yd.curPriority=o;snap("Prioridad de gasto");schedSave();render();
 }
 function startNameEdit(el,type,id){
   const yd=getYD();
@@ -1537,7 +1579,7 @@ function render(){
 
   const yd=getYD();
   const C=calc();
-  const{alqMes,gasMes,neto,netoMio,netoTio,movMes,acum,savARS,savUSD,savUSDT,savTot,cumSav,negociosMiParte,movRawByCur}=C;
+  const{alqMes,gasMes,neto,netoMio,netoTio,movMes,acum,savARS,savUSD,savUSDT,savTot,cumSav,negociosMiParte,movRawByCur,balByCurARS}=C;
   const pct=yd.pct||50;
   const sumAlq=alqMes.reduce((a,b)=>a+b,0);
   const sumGas=gasMes.reduce((a,b)=>a+b,0);
@@ -1707,8 +1749,20 @@ function render(){
       </tr>${detailRows}`;
     }).join("");
     const movTotal=movMes.reduce((a,b)=>a+b,0);
+    const prio=(yd.curPriority&&yd.curPriority.length===3)?yd.curPriority:["ARS","USD","USDT"];
+    const curColor={ARS:"var(--teal2)",USD:"var(--amber2)",USDT:"var(--blue2)"};
+    const prioChips=prio.map((c,idx)=>`${idx>0?'<span class="prio-arrow">›</span>':''}<button class="prio-chip${idx===0?" first":""}" onclick="setCurPriorityFront('${c}')" title="Gastar ${c} primero" style="color:${curColor[c]}">${c}</button>`).join("");
+    const bm=balByCurARS[activeMonth]||{ARS:0,USD:0,USDT:0};
+    const breakdown=["ARS","USD","USDT"].map(c=>{const ars=bm[c]||0;if(Math.abs(ars)<0.01)return"";const nat=fromARS(ars,c);return`<span class="bal-chip" style="color:${curColor[c]}">${c==="ARS"?fa(nat):fmt(nat,c)}</span>`;}).filter(Boolean).join("");
     document.getElementById("tab-mov").innerHTML=`
       <div class="mmgrid">${minis}</div>
+      <div class="prio-bar">
+        <span class="prio-label">💸 Prioridad de gasto:</span>
+        <div class="prio-chips">${prioChips}</div>
+        <span style="font-size:10px;color:var(--text3)">(tocá la moneda a gastar primero)</span>
+        <div class="prio-spacer"></div>
+        <span class="prio-label">Saldo ${MONTHS[activeMonth]}:</span> ${breakdown||'<span style="color:var(--text3)">—</span>'}
+      </div>
       <div class="sec-title"><div class="stl"><div class="sec-bar"></div><span>Detalle de movimientos</span></div><span style="font-size:10px;color:var(--text3)">← → para navegar meses · las columnas del mes seleccionado se resaltan</span></div>
       <div class="table-wrap" id="tw-mov">
         <table><thead><tr><th class="cn" style="min-width:175px">Movimiento</th>${TH}<th>Total</th><th></th></tr></thead>
@@ -1765,8 +1819,8 @@ function render(){
       const extraUSD=Number(yd.savExtra?.USD?.[i])||0;
       const extraUSDT=Number(yd.savExtra?.USDT?.[i])||0;
       const extraShow=c==="USD"?extraUSD:c==="USDT"?extraUSDT:extraARS;
-      const movByCur=movRawByCur[i]||{};
-      const movCurLines=Object.entries(movByCur).filter(([cc,a])=>cc!=="ARS"&&a!==0).map(([cc,a])=>`<div style="font-size:9px;color:var(--text3);white-space:nowrap">${fmt(a,cc)} = ${fa(toARS(a,cc))}</div>`).join("");
+      const bbc=balByCurARS[i]||{};
+      const movCurLines=["USD","USDT"].map(cc=>{const ars=bbc[cc]||0;if(Math.abs(ars)<0.01)return"";const nat=fromARS(ars,cc);return`<div style="font-size:9px;color:var(--text3);white-space:nowrap">${fmt(nat,cc)} = ${fa(ars)}</div>`;}).join("");
       // Celda "Derivar a meta": elegir meta + modo (Todo/%/Monto) + valor
       const goalsList=yd.savGoals||[];
       const asg=yd.savAssign?.[i];
