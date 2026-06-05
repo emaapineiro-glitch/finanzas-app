@@ -1229,10 +1229,16 @@ async function readResumen(){
   const sourceBlock=isPdf
     ?{type:"document",source:{type:"base64",media_type:"application/pdf",data:resumenFileData}}
     :{type:"image",source:{type:"base64",media_type:resumenFileType||"image/jpeg",data:resumenFileData}};
-  const sys=`Sos un asistente que lee resúmenes de tarjeta de crédito (Argentina). Extraé los PRÓXIMOS PAGOS a vencer, mes por mes. Año de referencia: ${state.currentYear}.
+  const sys=`Sos un asistente que lee resúmenes de tarjeta de crédito (Argentina) y proyecta los pagos futuros, mes por mes.
+Contexto: el mes actual es ${MONTHS[activeMonth]} de ${state.currentYear}.
 Respondé SOLO un objeto JSON válido, sin markdown:
-{"pagos":[{"mes":<0-11>,"monto":<número positivo>,"moneda":"ARS"|"USD"|"USDT","descripcion":"<breve>"}],"nota":"<observación breve>"}
-Reglas: "mes" es 0=Enero..11=Diciembre del vencimiento. Incluí el total del próximo vencimiento y, si figuran cuotas futuras, una entrada por cada mes futuro. Montos siempre positivos. Si no podés leerlo, devolvé {"pagos":[],"nota":"motivo"}.`;
+{"pagos":[{"anio":<año>,"mes":<0-11>,"monto":<número positivo>,"moneda":"ARS"|"USD"|"USDT","descripcion":"<breve, con nro de cuota si aplica ej 5/24>"}],"nota":"<observación breve>"}
+Reglas IMPORTANTES:
+- "mes" es 0=Enero..11=Diciembre y "anio" el año del vencimiento de ESE pago.
+- COMPRAS EN CUOTAS: si ves una compra en cuotas (ej "cuota 3/24" o "C.03/24"), tenés que PROYECTAR una entrada por CADA cuota restante (la 4/24, 5/24, … hasta la 24/24), una por mes consecutivo a partir del próximo, todas con el MISMO importe de la cuota. Si las cuotas cruzan al año siguiente, subí el "anio".
+- Incluí también los pagos de un solo pago / próximos vencimientos del período.
+- Montos siempre positivos. Sé exhaustivo con TODAS las cuotas pendientes de TODAS las compras.
+- Si no podés leerlo, devolvé {"pagos":[],"nota":"motivo"}.`;
   const H={"x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"};
   try{
     // 1) Preguntar a la cuenta qué modelos tiene disponibles y elegir uno con visión (sonnet/opus)
@@ -1252,7 +1258,7 @@ Reglas: "mes" es 0=Enero..11=Diciembre del vencimiento. Incluí el total del pr�
     const resp=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json",...H},
-      body:JSON.stringify({model:modelo,max_tokens:1500,system:sys,messages:[{role:"user",content:[sourceBlock,{type:"text",text:"Leé este resumen de tarjeta y devolvé el JSON de pagos por mes."}]}]})
+      body:JSON.stringify({model:modelo,max_tokens:8000,system:sys,messages:[{role:"user",content:[sourceBlock,{type:"text",text:"Leé este resumen de tarjeta y devolvé el JSON de pagos por mes, proyectando TODAS las cuotas pendientes en sus meses."}]}]})
     });
     if(!resp.ok){let e={};try{e=await resp.json();}catch(x){}throw new Error(e.error?.message||resp.statusText);}
     const data=await resp.json();
@@ -1270,24 +1276,39 @@ function renderResumenResult(p){
   const pagos=(p&&p.pagos)||[];
   const cont=document.getElementById("resumen-result");
   if(!pagos.length){cont.innerHTML=`<div style="color:var(--coral2);font-size:13px;margin-top:8px">No se detectaron pagos. ${p&&p.nota?("("+p.nota+")"):"Probá con una imagen más clara o un PDF."}</div>`;document.getElementById("resumen-apply-btn").style.display="none";return;}
-  const rows=pagos.map(pg=>`<div class="ai-field"><span style="min-width:70px">${MONTHS[pg.mes]||"?"}</span><span style="flex:1">${pg.descripcion||"Pago"}</span><strong style="color:var(--coral2)">-${fmt(Math.abs(pg.monto),pg.moneda||"ARS")}</strong></div>`).join("");
-  cont.innerHTML=`<div style="font-size:12px;color:var(--text2);margin:10px 0 6px">Detecté ${pagos.length} pago(s). Revisalos y aplicá:</div>${rows}${p.nota?`<div style="font-size:11px;color:var(--text3);margin-top:6px">💬 ${p.nota}</div>`:""}`;
+  const rows=pagos.map(pg=>`<div class="ai-field"><span style="min-width:92px">${(MONTHS[pg.mes]||"?").slice(0,3)} ${pg.anio||state.currentYear}</span><span style="flex:1">${pg.descripcion||"Pago"}</span><strong style="color:var(--coral2)">-${fmt(Math.abs(pg.monto),pg.moneda||"ARS")}</strong></div>`).join("");
+  cont.innerHTML=`<div style="font-size:12px;color:var(--text2);margin:10px 0 6px">Detecté ${pagos.length} pago(s) (incluye proyección de cuotas). Revisalos y aplicá:</div><div style="max-height:240px;overflow:auto">${rows}</div>${p.nota?`<div style="font-size:11px;color:var(--text3);margin-top:6px">💬 ${p.nota}</div>`:""}`;
   document.getElementById("resumen-apply-btn").style.display="";
 }
 function applyResumen(){
   if(!resumenParsed||!resumenCardId)return;
-  const yd=getYD();const r=yd.movRows.find(x=>x.id==resumenCardId);if(!r)return;
-  migrateRow(r);
+  const card=getYD().movRows.find(x=>x.id==resumenCardId);
+  const cardName=card?card.nombre:"💳 Tarjeta";
   const pagos=(resumenParsed.pagos||[]).filter(p=>p.mes>=0&&p.mes<=11);
-  const meses=[...new Set(pagos.map(p=>p.mes))];
-  meses.forEach(m=>{ if(r.txs[m]) r.txs[m]=r.txs[m].filter(t=>t.src!=="resumen"); });
-  pagos.forEach(pg=>{
-    const m=pg.mes;if(!r.txs[m])r.txs[m]=[];
-    const cur=pg.moneda||"ARS";
-    r.txs[m].push({id:Date.now()+Math.floor(Math.random()*1e6),monto:-Math.abs(Number(pg.monto)||0),currency:cur,rate:cur==="ARS"?undefined:"venta",nota:pg.descripcion||"Resumen tarjeta",fecha:new Date().toISOString(),src:"resumen"});
+  if(!pagos.length)return;
+  // Agrupar por año (las cuotas pueden cruzar a años siguientes)
+  const byYear={};
+  pagos.forEach(p=>{ const y=String(p.anio||state.currentYear); (byYear[y]=byYear[y]||[]).push(p); });
+  let total=0,years=[];
+  Object.entries(byYear).forEach(([y,ps])=>{
+    const yd=state.years[y]||(state.years[y]=makeYD());
+    // encontrar/crear la misma tarjeta en ese año (por nombre)
+    let r=(y===String(state.currentYear))?yd.movRows.find(x=>x.id==resumenCardId):null;
+    if(!r) r=yd.movRows.find(x=>x.nombre===cardName&&x.esTarjeta);
+    if(!r){ r={id:Date.now()+Math.floor(Math.random()*1e6),nombre:cardName,esTarjeta:true,txs:Array(12).fill(null).map(()=>[]),valores:Array(12).fill(0),currency:Array(12).fill("ARS")}; yd.movRows.push(r); }
+    if(!r.txs) r.txs=Array(12).fill(null).map(()=>[]);
+    // limpiar pagos previos de resumen en los meses afectados (para poder actualizar)
+    [...new Set(ps.map(p=>p.mes))].forEach(m=>{ if(r.txs[m]) r.txs[m]=r.txs[m].filter(t=>t.src!=="resumen"); });
+    ps.forEach(pg=>{
+      const m=pg.mes;if(!r.txs[m])r.txs[m]=[];
+      const cur=pg.moneda||"ARS";
+      r.txs[m].push({id:Date.now()+Math.floor(Math.random()*1e6),monto:-Math.abs(Number(pg.monto)||0),currency:cur,rate:cur==="ARS"?undefined:"venta",nota:pg.descripcion||"Resumen tarjeta",fecha:new Date().toISOString(),src:"resumen"});
+      total++;
+    });
+    years.push(y);
   });
   snap("Resumen de tarjeta cargado");schedSave();curTab="mov";render();
-  toast(`✅ ${pagos.length} pago(s) cargados en ${r.nombre}`,"tok");
+  toast(`✅ ${total} pago(s) cargados en ${cardName}${years.length>1?" (años "+years.join(", ")+")":""}`,"tok");
   closeResumen();
 }
 function changeYear(d){
