@@ -364,12 +364,10 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
   #auth-toolbar{margin-left:0!important;width:100%;justify-content:flex-end;gap:8px;order:-1;border-bottom:1px solid var(--border);padding-bottom:7px;margin-bottom:3px}
   #auth-toolbar span{max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* Meses tipo calendario 4×3 */
-  .month-nav{flex-direction:column;align-items:stretch;padding:9px 10px;gap:8px}
-  .mn-label{display:none}
-  .month-nav-center{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-  .month-nav-center .mn-btn{display:none}
+  .month-nav{padding:9px 10px;gap:8px}
+  .month-grid{grid-template-columns:repeat(4,1fr)}
   .month-pill{padding:9px 0;text-align:center;font-size:12.5px}
-  .mn-today{align-self:center;width:100%;padding:8px}
+  .month-toggle{flex:1}
   /* Pestañas y tarjetas */
   .tabs{gap:2px;padding:3px}
   .tab-btn{font-size:11px;padding:8px 2px}
@@ -428,10 +426,21 @@ body.light .nd:hover{background:var(--bg4)}
 /* Columna de conceptos SÓLIDA (sin transparencia, para que no se mezcle al hacer scroll) */
 .table-wrap td.cn{background:var(--bg2)!important}
 .table-wrap thead th.cn{background:var(--bg3)!important}
+.table-wrap tr:hover td.cn{background:var(--bg3)!important}
+.table-wrap tr td.cn.col-active,.table-wrap tr td.cn.col-today{background:var(--bg3)!important}
 
 /* Mostrar SOLO el panel de la pestaña activa (antes quedaban superpuestos) */
 .panel{display:none}
 .panel.active{display:block}
+
+/* Pestaña de meses desplegable */
+.month-toggle{display:flex;align-items:center;gap:7px;background:var(--bg4);border:1px solid var(--border2);border-radius:9px;padding:7px 14px;color:var(--text2);font-size:13px;cursor:pointer}
+.month-toggle:hover{border-color:var(--purple)}
+.month-toggle strong{color:var(--purple3);text-transform:capitalize}
+.mt-caret{color:var(--text3);font-size:10px;margin-left:2px}
+.month-grid{display:none;width:100%;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}
+.month-grid.open{display:grid}
+.month-grid .month-pill{text-align:center;padding:8px 0}
 </style>
 </head>
 <body class="logged-out">
@@ -490,20 +499,14 @@ body.light .nd:hover{background:var(--bg4)}
 
   <!-- TOOLBAR -->
   <div class="toolbar">
-    <div class="tb-left">
-      <button class="tb-btn u" id="btn-undo" onclick="undo()" disabled title="Deshacer (Ctrl+Z)">↩ Deshacer</button>
-      <button class="tb-btn r" id="btn-redo" onclick="redo()" disabled title="Rehacer (Ctrl+Y / Ctrl+Shift+Z)">↪ Rehacer</button>
-      <span class="hist-info" id="hist-info">Sin cambios</span>
-      <div class="tb-div"></div>
-      <div class="save-ind"><div class="sdot" id="sdot"></div><span id="stxt">Guardado</span></div>
-    </div>
-    <div class="tb-right">
-      <div class="tb-div"></div>
-      <button class="tb-btn" id="fb-btn" onclick="openFbModal()" title="Sincronización Firebase" style="color:var(--amber2);display:none">🔥 Firebase</button>
-      <button class="tb-btn ex" onclick="exportData()">⬇ Exportar JSON</button>
-      <button class="tb-btn" onclick="document.getElementById('imp-file').click()">⬆ Importar JSON</button>
-      <input type="file" id="imp-file" accept=".json" style="display:none" onchange="importData(event)">
-    </div>
+    <button class="tb-btn u" id="btn-undo" onclick="undo()" disabled title="Deshacer (Ctrl+Z)">↩ Deshacer</button>
+    <button class="tb-btn r" id="btn-redo" onclick="redo()" disabled title="Rehacer (Ctrl+Y / Ctrl+Shift+Z)">↪ Rehacer</button>
+    <div class="tb-div"></div>
+    <button class="tb-btn ex" onclick="exportData()">⬇ Exportar</button>
+    <button class="tb-btn" onclick="document.getElementById('imp-file').click()">⬆ Importar</button>
+    <input type="file" id="imp-file" accept=".json" style="display:none" onchange="importData(event)">
+    <span class="hist-info" id="hist-info" style="display:none">Sin cambios</span>
+    <div class="save-ind" style="margin-left:auto"><div class="sdot" id="sdot"></div><span id="stxt">Guardado</span></div>
   </div>
 
   <!-- MONTH NAV -->
@@ -1464,23 +1467,23 @@ function renderBiz(C){
 }
 
 
+let monthNavOpen=false;
+function toggleMonthNav(){monthNavOpen=!monthNavOpen;renderMonthNav();}
 function renderMonthNav(){
   const isCurYear=state.currentYear===TODAY_YEAR;
   const pills=MONTHS.map((m,i)=>{
     let cls="month-pill";
     if(i===activeMonth)cls+=" active-month";
     if(isCurYear&&i===TODAY_MONTH)cls+=" current-month";
-    return`<span class="${cls}" onclick="setActiveMonth(${i})">${m.slice(0,3)}</span>`;
+    return`<span class="${cls}" onclick="monthNavOpen=false;setActiveMonth(${i})">${m.slice(0,3)}</span>`;
   }).join("");
   const nav=document.getElementById("month-nav");
   nav.innerHTML=`
-    <span class="mn-label">◀ ▶ Navegar meses</span>
-    <div class="month-nav-center">
-      <button class="mn-btn" onclick="setActiveMonth(Math.max(0,activeMonth-1))">‹</button>
-      ${pills}
-      <button class="mn-btn" onclick="setActiveMonth(Math.min(11,activeMonth+1))">›</button>
-    </div>
-    ${isCurYear?`<button class="mn-today" onclick="setActiveMonth(${TODAY_MONTH})">Hoy</button>`:'<span></span>'}`;
+    <button class="month-toggle" onclick="toggleMonthNav()" title="Elegir mes">
+      📅 Mes: <strong>${MONTHS[activeMonth]}</strong> ${state.currentYear} <span class="mt-caret">${monthNavOpen?"▲":"▼"}</span>
+    </button>
+    ${isCurYear?`<button class="mn-today" onclick="monthNavOpen=false;setActiveMonth(${TODAY_MONTH})">Hoy</button>`:""}
+    <div class="month-grid${monthNavOpen?" open":""}">${pills}</div>`;
 }
 
 /* ── MAIN RENDER ── */
