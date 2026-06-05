@@ -429,6 +429,15 @@ body.logged-out #app,body.logged-out .voice-fab{display:none!important}
 .prio-spacer{flex:1;min-width:10px}
 .bal-chip{font-size:12px;font-weight:700;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:3px 9px;margin-left:3px}
 
+/* ── MENÚ DE FILA ── */
+.drag-handle{cursor:pointer}
+.row-menu{position:fixed;z-index:1600;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:5px;display:none;min-width:155px}
+.row-menu.open{display:block}
+.rm-item{padding:9px 12px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--text2);display:flex;align-items:center;gap:8px}
+.rm-item:hover{background:var(--bg3)}
+.rm-danger{color:var(--coral2)}
+.rm-danger:hover{background:rgba(232,93,74,.1)}
+
 /* ── TEMA CLARO ── */
 body.light{
   --bg:#eef0f8;--bg2:#ffffff;--bg3:#f5f6fc;--bg4:#e9ebf6;
@@ -1066,6 +1075,21 @@ function delMov(id){
   yd.movRows=yd.movRows.filter(r=>r.id!=id);
   snap(`Eliminar "${nm}"`);schedSave();render();toast("🗑 "+nm);
 }
+/* ── MENÚ DE FILA (puntitos ⠿) ── */
+function openRowMenu(e,id,type){
+  e.stopPropagation();
+  let menu=document.getElementById("row-menu");
+  if(!menu){menu=document.createElement("div");menu.id="row-menu";menu.className="row-menu";document.body.appendChild(menu);}
+  const fn=type==="mov"?`delMov(${id})`:type==="dpto"?`delDpto(${id})`:"";
+  menu.innerHTML=`<div class="rm-item rm-danger" onclick="closeRowMenu();${fn}">🗑 Eliminar fila</div>`;
+  const r=e.currentTarget.getBoundingClientRect();
+  menu.style.left=Math.min(r.left,window.innerWidth-170)+"px";
+  menu.style.top=(r.bottom+4)+"px";
+  menu.classList.add("open");
+}
+function closeRowMenu(){const m=document.getElementById("row-menu");if(m)m.classList.remove("open");}
+document.addEventListener("click",e=>{ if(!e.target.closest(".drag-handle")&&!e.target.closest("#row-menu")) closeRowMenu(); });
+
 function addDpto(){
   const inp=document.getElementById("nd-inp");const nm=inp.value.trim();if(!nm)return;
   const yd=getYD();const id=Date.now();
@@ -1637,9 +1661,9 @@ function render(){
       const cells=MONTHS.map((_,m)=>numCell(yd.alq[d.id]?.[m]||0,yd.alqC[d.id]?.[m]||"ARS",d.id,m,"alq")).join("");
       const rbg=di%2?"background:rgba(124,111,239,0.025)":"";
       return`<tr style="${rbg}" ondragover="dragOver(event,${d.id},'dpto')" ondrop="dragDropDpto(event,${d.id})">
-        <td class="cn"><div class="row-label"><span class="drag-handle" draggable="true" ondragstart="dragStart(event,${d.id},'dpto')" ondragend="dragEnd(event)">⠿</span><span class="dpill" style="background:rgba(124,111,239,.15);color:var(--purple3)">${di+1}</span><span onclick="startNameEdit(this,'dpto',${d.id})" style="cursor:pointer">${d.nombre}</span></div></td>
+        <td class="cn"><div class="row-label"><span class="drag-handle" draggable="true" ondragstart="dragStart(event,${d.id},'dpto')" ondragend="dragEnd(event)" onclick="openRowMenu(event,${d.id},'dpto')" title="Opciones (eliminar / arrastrar)">⠿</span><span class="dpill" style="background:rgba(124,111,239,.15);color:var(--purple3)">${di+1}</span><span onclick="startNameEdit(this,'dpto',${d.id})" style="cursor:pointer">${d.nombre}</span></div></td>
         ${cells}<td class="tc ${toc(rT)}">${fa(rT)}</td>
-        <td style="text-align:center;padding:1px"><button class="btn-del" onclick="delDpto(${d.id})">🗑</button></td></tr>`;
+        <td style="text-align:center;padding:1px"></td></tr>`;
     }).join("");
     const dGasR=yd.dptos.map((d,di)=>{
       const rT=MONTHS.reduce((s,_,m)=>s+toARS(yd.gas[d.id]?.[m]||0,yd.gasC[d.id]?.[m]||"ARS"),0);
@@ -1783,14 +1807,14 @@ function render(){
       return`<tr style="${rowBg}"
         ondragover="dragOver(event,${r.id},'mov')"
         ondrop="dragDrop(event,${r.id},'mov')"><td class="cn"><div class="row-label">
-          ${!isA?`<span class="drag-handle" draggable="true" ondragstart="dragStart(event,${r.id},'mov')" ondragend="dragEnd(event)">⠿</span>`:""}
+          ${!isA?`<span class="drag-handle" draggable="true" ondragstart="dragStart(event,${r.id},'mov')" ondragend="dragEnd(event)" onclick="openRowMenu(event,${r.id},'mov')" title="Opciones (eliminar / arrastrar)">⠿</span>`:""}
           ${isA
             ?`<span class="pill pp">auto</span><em style="color:var(--purple2)">${r.nombre}</em>`
             :`<span onclick="startNameEdit(this,'mov',${r.id})" style="cursor:pointer">${r.nombre}</span>`}
         </div></td>
         ${cells}
         <td class="tc ${toc(total,total>=0?'tt':'tco')}">${fa(total)}</td>
-        <td style="text-align:center;padding:1px">${!isA?`<button class="btn-del" onclick="delMov(${r.id})">🗑</button>`:""}</td>
+        <td style="text-align:center;padding:1px"></td>
       </tr>${detailRows}`;
     }).join("");
     const movTotal=movMes.reduce((a,b)=>a+b,0);
