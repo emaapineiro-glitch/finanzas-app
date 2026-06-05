@@ -2206,8 +2206,9 @@ function applyVoiceLocal(p){
     closeVoice();return;
   }
   const signed=(p.signo==="egreso"?-1:1)*p.monto;
-  let row=yd.movRows.find(r=>/por voz/i.test(r.nombre||""));
-  if(!row){ row={id:Date.now(),nombre:"🎤 Por voz",txs:Array(12).fill(null).map(()=>[]),valores:Array(12).fill(0),currency:Array(12).fill("ARS")}; yd.movRows.push(row); }
+  const nombre="🎤 "+(p.desc.charAt(0).toUpperCase()+p.desc.slice(1));
+  let row=yd.movRows.find(r=>(r.nombre||"").toLowerCase()===nombre.toLowerCase());
+  if(!row){ row={id:Date.now(),nombre,txs:Array(12).fill(null).map(()=>[]),valores:Array(12).fill(0),currency:Array(12).fill("ARS")}; yd.movRows.push(row); }
   migrateRow(row);
   addTx(row.id,m,signed,cur,p.desc,new Date().toISOString());
   expandedRows.add(row.id+"_"+m);
