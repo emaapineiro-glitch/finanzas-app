@@ -3048,10 +3048,22 @@ async function adminListUsers(){
           <div style="color:var(--text1);font-weight:600">${u.name||u.email}</div>
           <div style="color:var(--text3);font-size:11px">${u.email||""} ${u.disabled?"· <span style='color:var(--coral2)'>deshabilitado</span>":""} ${u.alqEnabled?"· 🏢 alq":""}</div>
         </div>
+        <button class="tb-btn" style="color:var(--amber2)" onclick="adminResetPassword('${(u.email||"").replace(/'/g,"")}')">🔑 Restablecer clave</button>
         <button class="tb-btn" onclick="adminToggleUser('${uid}',${!u.disabled})">${u.disabled?"Habilitar":"Deshabilitar"}</button>
         <button class="tb-btn" style="color:var(--coral2)" onclick="adminDeleteUserData('${uid}','${(u.email||"").replace(/'/g,"")}')">Borrar datos</button>
       </div>`).join("");
   }catch(e){cont.innerHTML="<div style='color:var(--coral2)'>Error al listar: "+e.message+"</div>";}
+}
+async function adminResetPassword(email){
+  if(!email){alert("Ese usuario no tiene email registrado.");return;}
+  if(!confirm("¿Enviar un email de restablecimiento de contraseña a:\n"+email+" ?\n\nEl usuario recibirá un link para elegir una nueva contraseña."))return;
+  try{
+    await firebase.auth().sendPasswordResetEmail(email);
+    alert("✅ Email enviado a "+email+".\n\nDecile que revise su bandeja de entrada y la carpeta de SPAM. Con el link del mail puede poner su nueva contraseña.");
+  }catch(e){
+    const m={"auth/user-not-found":"No existe una cuenta con ese email.","auth/invalid-email":"Email inválido.","auth/too-many-requests":"Demasiados intentos, esperá un momento."}[e.code]||e.message;
+    alert("Error: "+m);
+  }
 }
 async function adminToggleUser(uid,disabled){
   try{await authDb.ref("userRegistry/"+uid+"/disabled").set(disabled);adminListUsers();}
