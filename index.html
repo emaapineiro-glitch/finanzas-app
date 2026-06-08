@@ -567,6 +567,7 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 2px rgba(124,111,239,.1
             <div class="pm-avatar">👤</div>
             <div style="min-width:0"><div class="pm-name" id="pm-name">Usuario</div><div class="pm-email" id="pm-email"></div></div>
           </div>
+          <div class="pm-item" id="pm-admin" onclick="openAdminAuthed()" style="display:none">⚙ Administrar usuarios</div>
           <div class="pm-item" onclick="openPwChangeVoluntary()">🔑 Cambiar contraseña</div>
           <div class="pm-item" onclick="toggleTheme()"><span id="pm-theme-label">🌞 Modo claro</span></div>
           <div class="pm-item pm-danger" onclick="doLogout()">🚪 Cerrar sesión</div>
@@ -2965,6 +2966,11 @@ function renderAuthToolbar(user){
   const nm=user.email?user.email.split("@")[0]:"Usuario";
   const e1=document.getElementById("pm-email"); if(e1)e1.textContent=user.email||"";
   const n1=document.getElementById("pm-name"); if(n1)n1.textContent=nm;
+  const adm=document.getElementById("pm-admin"); if(adm) adm.style.display=(user.uid===ADMIN_UID)?"":"none";
+}
+function openAdminAuthed(){
+  const m=document.getElementById("profile-menu"); if(m)m.classList.remove("open");
+  openAdmin(true); // ya autenticado como admin: saltea la contraseña maestra
 }
 
 /* ── MENÚ DE PERFIL + TEMA ── */
@@ -2987,12 +2993,19 @@ function toggleTheme(){
 applyTheme(localStorage.getItem("fp_theme")==="light"?"light":"dark");
 
 /* ═══ ADMIN ═══ */
-function openAdmin(){
+function openAdmin(skipGate){
   document.getElementById("admin-modal-bg").classList.add("open");
-  document.getElementById("admin-gate").style.display="";
-  document.getElementById("admin-panel").style.display="none";
-  document.getElementById("admin-master").value="";
-  document.getElementById("admin-gate-msg").textContent="";
+  if(skipGate){
+    // Ya autenticado como admin → panel directo (las reglas permiten gestionar)
+    document.getElementById("admin-gate").style.display="none";
+    document.getElementById("admin-panel").style.display="";
+    adminListUsers();
+  }else{
+    document.getElementById("admin-gate").style.display="";
+    document.getElementById("admin-panel").style.display="none";
+    document.getElementById("admin-master").value="";
+    document.getElementById("admin-gate-msg").textContent="";
+  }
 }
 function closeAdmin(){document.getElementById("admin-modal-bg").classList.remove("open");}
 function unlockAdmin(){
