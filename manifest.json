@@ -1,7 +1,7 @@
 {
-  "name": "Finanzas Personales",
-  "short_name": "Finanzas",
-  "description": "Gestor de finanzas personales: alquileres, movimientos, ahorros y negocios.",
+  "name": "Control App$",
+  "short_name": "Control App$",
+  "description": "Control de finanzas: alquileres, movimientos, ahorros y negocios.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
