@@ -781,6 +781,42 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 2px rgba(124,111,239,.1
     </div>
   </div>
 </div>
+<div class="vmodal-bg" id="imp-bc-modal-bg" onclick="if(event.target===this)closeImportBC()">
+  <div class="vmodal">
+    <div class="vmodal-handle"></div>
+    <div class="vmodal-title">🏦 Importar movimientos de Banco Ciudad</div>
+    <div class="vmodal-sub">Subí uno o varios "Resumen de cuenta" en PDF (Home Banking → tu cuenta → Resumen de cuenta). Se procesa en tu dispositivo, sin subir nada a ningún servidor.</div>
+    <input type="file" id="imp-bc-file" accept=".pdf" multiple style="display:none" onchange="bcFilePicked(event)">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="vbtn ghost" onclick="document.getElementById('imp-bc-file').click()">📎 Elegir PDF(s)</button>
+      <span id="imp-bc-filename" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <div id="imp-bc-status" style="font-size:12px;min-height:18px;margin-bottom:6px"></div>
+    <div id="imp-bc-result"></div>
+    <div class="vbtn-row" style="margin-top:14px">
+      <button class="vbtn primary" id="imp-bc-apply-btn" onclick="applyBCImport()" style="display:none">✅ Importar seleccionados</button>
+      <button class="vbtn ghost" onclick="closeImportBC()">Cerrar</button>
+    </div>
+  </div>
+</div>
+<div class="vmodal-bg" id="contactos-modal-bg" onclick="if(event.target===this)closeContactos()">
+  <div class="vmodal">
+    <div class="vmodal-handle"></div>
+    <div class="vmodal-title">👤 Directorio de contactos</div>
+    <div class="vmodal-sub">Asociá un CBU/CUIT (Banco Ciudad) o un nombre (Fiwind) a una persona. Si además le ponés un depto, sus transferencias entrantes se cargan solas como ingreso de alquiler de ese depto — ya no van a Movimientos.</div>
+    <div id="contactos-list" style="margin-bottom:14px"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--border2);border-radius:10px">
+      <input id="ct-pattern" placeholder="CBU/CUIT o nombre a reconocer (ej: 27166806319)" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg4);color:var(--text1);font-size:13px;outline:none">
+      <input id="ct-label" placeholder="Nombre para mostrar (ej: Sandra)" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg4);color:var(--text1);font-size:13px;outline:none">
+      <input id="ct-dpto" list="ct-dpto-list" placeholder="Depto a asociar (opcional — vacío = solo etiqueta, sin rutear)" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg4);color:var(--text1);font-size:13px;outline:none">
+      <datalist id="ct-dpto-list"></datalist>
+      <button class="vbtn primary" onclick="addContacto()">➕ Agregar contacto</button>
+    </div>
+    <div class="vbtn-row" style="margin-top:14px">
+      <button class="vbtn ghost" onclick="closeContactos()">Cerrar</button>
+    </div>
+  </div>
+</div>
 <!-- INSTALL BANNER -->
 <div id="install-banner">
   <span>📲 Instalá Finanzas en tu celular</span>
@@ -812,7 +848,7 @@ function makeYD(){
   };
 }
 
-let state={currentYear:2026,fx:{USD:1435,USDT:1432},fxc:{USD:1435,USDT:1432},years:{"2026":makeYD()},tabOrder:["alq","mov","sav","res"]};
+let state={currentYear:2026,fx:{USD:1435,USDT:1432},fxc:{USD:1435,USDT:1432},years:{"2026":makeYD()},tabOrder:["alq","mov","sav","res"],contactos:[]};
 let hist=[],hIdx=-1,editingCell=null,curTab="alq",activeMonth=TODAY_MONTH,activeBiz=null;
 let saveTimer=null,toastTimer=null;
 let currentUid=null;
@@ -1452,9 +1488,15 @@ async function fiwindFilePicked(e){
       const moneda=String(row[idx.moneda]||"ARS").trim().toUpperCase();
       if(!fecha||!monto)continue;
       const cl=classifyFiwindTipo(tipoRaw);
+      let bucket=cl.bucket,routeDpto=null,notaLabel=null;
+      if(bucket==="depositos"||bucket==="retiros"){ // etiqueta en ambas direcciones; el ruteo a Alquileres solo aplica a ingresos (depósitos)
+        const c=matchContacto(tipoRaw);
+        if(c){ notaLabel=c.label; if(c.dptoNombre&&bucket==="depositos"){ routeDpto=c.dptoNombre; bucket="alq::"+c.dptoNombre; } }
+      }
       const fechaISO=fecha.toISOString();
-      parsed.push({fecha,fechaISO,tipoRaw,monto,moneda,bucket:cl.bucket,signo:cl.signo,skip:!!cl.skip,
-        fp:fechaISO+"|"+tipoRaw+"|"+monto+"|"+moneda});
+      const nota=notaLabel?(notaLabel+" · "+tipoRaw):tipoRaw;
+      parsed.push({fecha,fechaISO,tipoRaw,nota,monto,moneda,bucket,signo:cl.signo,skip:!!cl.skip,routeDpto,
+        fp:"fiwind|"+fechaISO+"|"+tipoRaw+"|"+monto+"|"+moneda});
     }
     if(!parsed.length) throw new Error("No encontré filas de movimientos en el archivo.");
     fiwindRows=parsed;
@@ -1464,17 +1506,101 @@ async function fiwindFilePicked(e){
     st.style.color="var(--coral2)";st.textContent="❌ "+err.message;
   }
 }
-function collectFiwindFpIds(){
+function collectImportFpIds(){
   const seen=new Set();
   Object.values(state.years||{}).forEach(yd=>{
     (yd.movRows||[]).forEach(r=>{
       (r.txs||[]).forEach(arr=>{ (arr||[]).forEach(t=>{ if(t.fpId) seen.add(t.fpId); }); });
     });
+    (yd.alqImportFps||[]).forEach(fp=>seen.add(fp));
   });
   return seen;
 }
+
+/* ══ DIRECTORIO DE CONTACTOS (etiquetar y, opcionalmente, rutear a Alquileres) ══
+   state.contactos: [{id, pattern, label, dptoNombre}]. "pattern" se busca como substring
+   (sin distinguir mayúsculas) en la Descripción/CBU de Banco Ciudad o en el "Tipo" de Fiwind.
+   Si el contacto tiene dptoNombre y el movimiento es un ingreso, se rutea directo a esa
+   pestaña de Alquileres en vez de crear una fila en Movimientos. */
+function matchContacto(text){
+  if(!text) return null;
+  const T=String(text).toUpperCase();
+  return (state.contactos||[]).find(c=>c.pattern&&T.includes(String(c.pattern).toUpperCase()));
+}
+function openContactos(){
+  document.getElementById("contactos-modal-bg").classList.add("open");
+  renderContactosList();
+  const dl=document.getElementById("ct-dpto-list");
+  const yd=getYD();
+  dl.innerHTML=(yd.dptos||[]).map(d=>`<option value="${(d.nombre||"").replace(/"/g,"&quot;")}">`).join("");
+}
+function closeContactos(){document.getElementById("contactos-modal-bg").classList.remove("open");}
+function renderContactosList(){
+  const cont=document.getElementById("contactos-list");
+  const list=state.contactos||[];
+  if(!list.length){cont.innerHTML=`<div style="font-size:12px;color:var(--text3)">Todavía no agregaste contactos.</div>`;return;}
+  cont.innerHTML=list.map(c=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border2)">
+      <span style="flex:1">
+        <strong>${(c.label||"").replace(/</g,"&lt;")}</strong>
+        <div style="font-size:11px;color:var(--text3)">${(c.pattern||"").replace(/</g,"&lt;")}${c.dptoNombre?` · 🏠 ${c.dptoNombre.replace(/</g,"&lt;")}`:""}</div>
+      </span>
+      <button class="tb-btn" style="color:var(--coral2)" onclick="deleteContacto('${c.id}')">🗑</button>
+    </div>`).join("");
+}
+function addContacto(){
+  const pattern=document.getElementById("ct-pattern").value.trim();
+  const label=document.getElementById("ct-label").value.trim();
+  const dptoNombre=document.getElementById("ct-dpto").value.trim();
+  if(!pattern||!label){toast("Completá el CBU/CUIT/nombre y el nombre a mostrar","tundo");return;}
+  if(!state.contactos)state.contactos=[];
+  state.contactos.push({id:Date.now()+Math.floor(Math.random()*1e6),pattern,label,dptoNombre:dptoNombre||null});
+  document.getElementById("ct-pattern").value="";
+  document.getElementById("ct-label").value="";
+  document.getElementById("ct-dpto").value="";
+  snap("Agregar contacto: "+label);schedSave();renderContactosList();
+  toast("✓ Contacto agregado","tok");
+}
+function deleteContacto(id){
+  state.contactos=(state.contactos||[]).filter(c=>String(c.id)!==String(id));
+  snap("Eliminar contacto");schedSave();renderContactosList();
+  toast("✓ Eliminado","tok");
+}
+function findOrCreateDptoByName(yd,nombre){
+  let d=(yd.dptos||[]).find(x=>(x.nombre||"").trim().toLowerCase()===nombre.trim().toLowerCase());
+  if(!d){
+    const id=Date.now()+Math.floor(Math.random()*1e6);
+    d={id,nombre};
+    if(!yd.dptos)yd.dptos=[];
+    yd.dptos.push(d);
+    yd.alq[id]=Array(12).fill(0);yd.alqC[id]=Array(12).fill("ARS");
+    yd.gas[id]=Array(12).fill(0);yd.gasC[id]=Array(12).fill("ARS");
+  }
+  return d;
+}
+// Suma un ingreso detectado (import) al alquiler del depto/mes indicado. Deduplica por fp
+// (yd.alqImportFps) porque, a diferencia de Movimientos, las celdas de Alquileres no guardan
+// transacciones individuales — son un solo número por mes.
+function routeAlquilerIncome(yd,dptoNombre,m,monto,moneda,fp){
+  if(!yd.alqImportFps)yd.alqImportFps=[];
+  if(yd.alqImportFps.includes(fp))return false;
+  const d=findOrCreateDptoByName(yd,dptoNombre);
+  if(!yd.alq[d.id])yd.alq[d.id]=Array(12).fill(0);
+  if(!yd.alqC[d.id])yd.alqC[d.id]=Array(12).fill("ARS");
+  const curActual=yd.alqC[d.id][m]||"ARS";
+  const existente=Number(yd.alq[d.id][m])||0;
+  let montoSumar=monto;
+  if(existente>0&&curActual!==moneda){
+    montoSumar=fromARS(toARS(monto,moneda),curActual); // convertir a la moneda ya cargada en esa celda
+  }else if(existente===0){
+    yd.alqC[d.id][m]=moneda; // celda vacía: adopta la moneda del pago entrante
+  }
+  yd.alq[d.id][m]=existente+montoSumar;
+  yd.alqImportFps.push(fp);
+  return true;
+}
 function summarizeFiwind(parsed){
-  const seen=collectFiwindFpIds();
+  const seen=collectImportFpIds();
   const buckets={};
   parsed.forEach(p=>{
     if(p.bucket==="conversion")return; // internas al exchange, no se listan ni se importan
@@ -1486,12 +1612,17 @@ function summarizeFiwind(parsed){
   });
   return buckets;
 }
+function fiwindBucketInfo(k){
+  if(FIWIND_BUCKET_INFO[k])return FIWIND_BUCKET_INFO[k];
+  if(k.indexOf("alq::")===0)return{label:"🏠 Alquiler · "+k.slice(5)+" (detectado por contacto)",icon:"🏠",defaultOn:true};
+  return{label:k,icon:"•",defaultOn:false};
+}
 function renderFiwindPreview(buckets){
   const cont=document.getElementById("imp-fiwind-result");
   const keys=Object.keys(buckets);
   if(!keys.length){cont.innerHTML=`<div style="color:var(--coral2);font-size:13px;margin-top:8px">No se detectaron movimientos importables en el archivo.</div>`;document.getElementById("imp-fiwind-apply-btn").style.display="none";return;}
   const rows=keys.map(k=>{
-    const info=FIWIND_BUCKET_INFO[k]||{label:k,icon:"•",defaultOn:false};
+    const info=fiwindBucketInfo(k);
     const b=buckets[k];
     const curLines=Object.entries(b.byCur).map(([c,v])=>fmt(v,c)).join(" · ")||"—";
     const dupNote=b.dup?`<span style="color:var(--text3)"> (+${b.dup} ya importados)</span>`:"";
@@ -1523,7 +1654,7 @@ function addTxIn(yd,rowId,m,monto,currency,nota,fecha,rate,extra){
   r.valores[m]=r.txs[m].reduce((a,t)=>a+txARS(t,cur),0);
 }
 function findOrCreateFiwindRow(yd,bucket){
-  const info=FIWIND_BUCKET_INFO[bucket]||{label:"🪙 Fiwind · Otros"};
+  const info=fiwindBucketInfo(bucket);
   let row=yd.movRows.find(r=>r.nombre===info.label);
   if(!row){
     row={id:Date.now()+Math.floor(Math.random()*1e6),nombre:info.label,txs:Array(12).fill(null).map(()=>[]),valores:Array(12).fill(0),currency:Array(12).fill("ARS")};
@@ -1534,21 +1665,25 @@ function findOrCreateFiwindRow(yd,bucket){
 function applyFiwindImport(){
   if(!fiwindRows||!fiwindRows.length)return;
   const included=new Set();
-  Object.keys(FIWIND_BUCKET_INFO).forEach(k=>{
+  [...new Set(fiwindRows.map(p=>p.bucket))].forEach(k=>{
     const chk=document.getElementById("fw-bk-"+k);
     if(chk&&chk.checked)included.add(k);
   });
   if(!included.size){toast("Elegí al menos un grupo","tundo");return;}
-  const seen=collectFiwindFpIds();
+  const seen=collectImportFpIds();
   let added=0,skipped=0;const touchedYears=new Set();
   fiwindRows.forEach(p=>{
     if(p.skip||!included.has(p.bucket))return;
     if(seen.has(p.fp)){skipped++;return;}
     const year=p.fecha.getFullYear(),m=p.fecha.getMonth();
     const yd=yearData(year);
-    const row=findOrCreateFiwindRow(yd,p.bucket);
-    const signed=p.signo<0?-p.monto:p.monto;
-    addTxIn(yd,row.id,m,signed,p.moneda,p.tipoRaw,p.fechaISO,"venta",{fpId:p.fp,src:"fiwind"});
+    if(p.routeDpto){
+      if(!routeAlquilerIncome(yd,p.routeDpto,m,p.monto,p.moneda,p.fp)){skipped++;return;}
+    }else{
+      const row=findOrCreateFiwindRow(yd,p.bucket);
+      const signed=p.signo<0?-p.monto:p.monto;
+      addTxIn(yd,row.id,m,signed,p.moneda,p.nota||p.tipoRaw,p.fechaISO,"venta",{fpId:p.fp,src:"fiwind"});
+    }
     seen.add(p.fp);added++;touchedYears.add(year);
   });
   if(added>0){
@@ -1558,6 +1693,239 @@ function applyFiwindImport(){
   }
   toast(`✅ ${added} movimiento(s) importado(s)${skipped?` · ${skipped} ya existían`:""}`,added>0?"tok":"tundo");
   if(added>0)closeImportFiwind();
+}
+
+/* ══ IMPORTAR MOVIMIENTOS DE BANCO CIUDAD (PDF de "Resumen de cuenta", local, sin IA) ══
+   Extrae el texto posicional del PDF con pdf.js y reconstruye la tabla FECHA/CONCEPTO/DÉBITO/CRÉDITO/SALDO
+   usando la posición X de cada columna (fija en la plantilla del banco: débito≈234, crédito≈285, saldo≈362).
+   Validado contra extractos reales: el saldo recalculado coincide exacto con el saldo declarado en cada resumen. */
+let bcRows=null;
+const BC_MONTHS_ES={ENE:0,FEB:1,MAR:2,ABR:3,MAY:4,JUN:5,JUL:6,AGO:7,SEP:8,OCT:9,NOV:10,DIC:11};
+const BC_BUCKET_INFO={
+  transferencias:{label:"🏦 Banco Ciudad · Transferencias",icon:"🔁"},
+  transferencias_propias:{label:"🏦 Banco Ciudad · Transferencias entre mis cuentas",icon:"↔️",defaultOn:false},
+  intereses:{label:"🏦 Banco Ciudad · Intereses",icon:"📈"},
+  tarjeta:{label:"🏦 Banco Ciudad · Tarjeta de crédito",icon:"💳"},
+  recargas:{label:"🏦 Banco Ciudad · Recargas",icon:"📱"},
+  depositos:{label:"🏦 Banco Ciudad · Depósitos en efectivo",icon:"💵"},
+  prestamos:{label:"🏦 Banco Ciudad · Préstamos",icon:"🏛"},
+  servicios:{label:"🏦 Banco Ciudad · Servicios/Facturas",icon:"🧾"},
+  cambio:{label:"🏦 Banco Ciudad · Cambio de moneda",icon:"💱"},
+  comisiones:{label:"🏦 Banco Ciudad · Comisiones",icon:"⚠️"},
+  otros:{label:"🏦 Banco Ciudad · Consumos y otros",icon:"🛒"}
+};
+function classifyBCConcepto(t){
+  t=(t||"").trim();
+  if(/^TRANSFERENCIA/i.test(t)) return "transferencias";
+  if(/^CAPITALIZACION/i.test(t)) return "intereses";
+  if(/^N\/D RECARGA/i.test(t)) return "recargas";
+  if(/^DEPOSITO EN EFECTI/i.test(t)) return "depositos";
+  if(/^N\/D DEBITO PRESTAM/i.test(t)) return "prestamos";
+  if(/^(WWW\.|N\/D PAGO SERV)/i.test(t)) return "servicios";
+  if(/^N\/C COMPRA VENTA/i.test(t)) return "cambio";
+  if(/^(N\/D COM|TARJETA Y PIN)/i.test(t)) return "comisiones"; // más específico: va ANTES del genérico "Tarjeta " para no confundir con pagos de tarjeta de crédito
+  if(/^Tarjeta\s/i.test(t)) return "tarjeta";
+  return "otros";
+}
+function bcBucketX1(x1){
+  const targets=[["debito",234],["credito",285],["saldo",362]];
+  for(const[name,t] of targets){ if(Math.abs(x1-t)<=4) return name; }
+  return null;
+}
+async function loadPdfJs(){
+  if(window.pdfjsLib) return;
+  await loadScript("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js");
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js";
+}
+async function parseBCPdf(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let moneda="ARS";
+  let cuitTitular=null; // CUIT/CUIL del titular de la cuenta, para detectar transferencias entre sus propias cuentas
+  const rows=[];
+  for(let pn=1;pn<=pdf.numPages;pn++){
+    const page=await pdf.getPage(pn);
+    const tc=await page.getTextContent();
+    const items=tc.items.map(it=>({str:it.str,x0:it.transform[4],x1:it.transform[4]+(it.width||0),y:it.transform[5]}));
+    if(pn===1){
+      const headerText=items.map(i=>i.str).join(" ").replace(/\s+/g," "); // pdf.js emite espacios como items separados: normalizar antes de matchear
+      if(/CAJA DE AHORROS? D[OÓ]LAR/i.test(headerText)) moneda="USD";
+      const cuitM=headerText.match(/(\d{2})-(\d{7,8})-(\d)\b/);
+      if(cuitM) cuitTitular=cuitM[1]+cuitM[2]+cuitM[3]; // mismo formato (sin guiones) que aparece en la columna Descripción de las transferencias
+    }
+    const byY=new Map();
+    items.forEach(it=>{
+      if(!it.str.trim())return;
+      const key=Math.round(it.y*2)/2; // agrupa filas con tolerancia de 0.5pt
+      if(!byY.has(key))byY.set(key,[]);
+      byY.get(key).push(it);
+    });
+    const ys=[...byY.keys()].sort((a,b)=>b-a); // de arriba a abajo (Y de PDF crece hacia arriba)
+    for(const y of ys){
+      const ws=byY.get(y).sort((a,b)=>a.x0-b.x0);
+      const first=ws[0].str.trim();
+      if(!/^\d{2}-[A-ZÑ]{3}-\d{4}$/i.test(first)) continue;
+      const fecha=first.toUpperCase();
+      let debito=null,credito=null,saldo=null;
+      const conceptoParts=[],descParts=[];
+      for(let i=1;i<ws.length;i++){
+        const w=ws[i],txt=w.str.trim(); if(!txt)continue;
+        if(/^-?[\d.]+,\d{2}$/.test(txt)){
+          const b=bcBucketX1(w.x1);
+          if(b==="debito")debito=txt; else if(b==="credito")credito=txt; else if(b==="saldo")saldo=txt; else descParts.push(txt);
+        }else if(w.x0<185){ conceptoParts.push(txt); }
+        else{ descParts.push(txt); }
+      }
+      if(debito===null&&credito===null) continue; // fila "TRANSPORTE" de paginación (sin movimiento real)
+      rows.push({fecha,concepto:conceptoParts.join(" "),debito,credito,saldo,desc:descParts.join(" ")});
+    }
+  }
+  return {rows,moneda,cuitTitular};
+}
+function parseBCFecha(str){
+  const m=String(str||"").trim().toUpperCase().match(/^(\d{2})-([A-ZÑ]{3})-(\d{4})$/);
+  if(!m) return null;
+  const mm=BC_MONTHS_ES[m[2]]; if(mm===undefined) return null;
+  const d=new Date(+m[3],mm,+m[1],12,0,0);
+  return isNaN(d.getTime())?null:d;
+}
+function bcMonto(str){
+  if(!str) return 0;
+  return Math.abs(Number(String(str).replace(/\./g,"").replace(",","."))||0);
+}
+function openImportBC(){
+  bcRows=null;
+  document.getElementById("imp-bc-modal-bg").classList.add("open");
+  document.getElementById("imp-bc-filename").textContent="";
+  document.getElementById("imp-bc-status").textContent="";
+  document.getElementById("imp-bc-result").innerHTML="";
+  document.getElementById("imp-bc-apply-btn").style.display="none";
+  document.getElementById("imp-bc-file").value="";
+}
+function closeImportBC(){document.getElementById("imp-bc-modal-bg").classList.remove("open");}
+async function bcFilePicked(e){
+  const files=[...(e.target.files||[])]; if(!files.length)return;
+  document.getElementById("imp-bc-filename").textContent=files.length===1?("📎 "+files[0].name):`📎 ${files.length} archivos`;
+  const st=document.getElementById("imp-bc-status");
+  st.style.color="var(--text2)";st.textContent="⏳ Leyendo PDF(s)…";
+  document.getElementById("imp-bc-result").innerHTML="";
+  document.getElementById("imp-bc-apply-btn").style.display="none";
+  try{
+    await loadPdfJs();
+    const parsed=[];
+    for(const f of files){
+      const buf=await f.arrayBuffer();
+      const {rows,moneda,cuitTitular}=await parseBCPdf(buf);
+      rows.forEach(r=>{
+        const fecha=parseBCFecha(r.fecha);
+        if(!fecha)return;
+        const isDebito=r.debito!=null;
+        const monto=bcMonto(isDebito?r.debito:r.credito);
+        if(!monto)return;
+        let bucket=classifyBCConcepto(r.concepto);
+        // emparejar: si es una transferencia y el destinatario/origen es el mismo titular de la cuenta
+        // (aparece su propio CUIT en la Descripción), es plata moviéndose entre sus propias cuentas, no un ingreso/gasto real
+        if(bucket==="transferencias"&&cuitTitular&&(r.desc||"").includes(cuitTitular)) bucket="transferencias_propias";
+        // directorio de contactos: si reconozco al remitente y lo tengo asociado a un depto, rutear como alquiler
+        let routeDpto=null,notaLabel=null;
+        if(bucket==="transferencias"){
+          const c=matchContacto(r.desc);
+          if(c){ notaLabel=c.label; if(c.dptoNombre&&!isDebito){ routeDpto=c.dptoNombre; bucket="alq::"+c.dptoNombre; } }
+        }
+        const fechaISO=fecha.toISOString();
+        const notaBase=notaLabel?(notaLabel+" · "+(r.concepto||"").trim()):((r.concepto||"").trim()+(r.desc?(" · "+r.desc.trim()):""));
+        parsed.push({fecha,fechaISO,concepto:r.concepto,desc:r.desc,monto,moneda,bucket,
+          signo:isDebito?-1:1,nota:notaBase,routeDpto,
+          // el saldo resultante es único por fila real (aunque se repita fecha+monto, como varias transferencias
+          // iguales el mismo día): sin esto, transacciones legítimas repetidas se confundían con duplicados
+          fp:"bc|"+fechaISO+"|"+r.concepto+"|"+monto+"|"+moneda+"|"+(isDebito?"D":"C")+"|"+(r.saldo||"")});
+      });
+    }
+    if(!parsed.length) throw new Error("No encontré movimientos en el/los PDF. ¿Son los \"Resumen de cuenta\" de Banco Ciudad?");
+    bcRows=parsed;
+    renderBCPreview(summarizeBC(parsed));
+    st.textContent="";
+  }catch(err){
+    st.style.color="var(--coral2)";st.textContent="❌ "+err.message;
+  }
+}
+function summarizeBC(parsed){
+  const seen=collectImportFpIds();
+  const buckets={};
+  parsed.forEach(p=>{
+    if(!buckets[p.bucket])buckets[p.bucket]={count:0,dup:0,byCur:{}};
+    const b=buckets[p.bucket];
+    if(seen.has(p.fp)){b.dup++;return;}
+    b.count++;
+    b.byCur[p.moneda]=(b.byCur[p.moneda]||0)+(p.signo<0?-p.monto:p.monto);
+  });
+  return buckets;
+}
+function bcBucketInfo(k){
+  if(BC_BUCKET_INFO[k])return BC_BUCKET_INFO[k];
+  if(k.indexOf("alq::")===0)return{label:"🏠 Alquiler · "+k.slice(5)+" (detectado por contacto)",icon:"🏠"};
+  return{label:k,icon:"•"};
+}
+function renderBCPreview(buckets){
+  const cont=document.getElementById("imp-bc-result");
+  const keys=Object.keys(buckets);
+  if(!keys.length){cont.innerHTML=`<div style="color:var(--coral2);font-size:13px;margin-top:8px">No se detectaron movimientos importables.</div>`;document.getElementById("imp-bc-apply-btn").style.display="none";return;}
+  const rows=keys.map(k=>{
+    const info=bcBucketInfo(k);
+    const b=buckets[k];
+    const curLines=Object.entries(b.byCur).map(([c,v])=>fmt(v,c)).join(" · ")||"—";
+    const dupNote=b.dup?`<span style="color:var(--text3)"> (+${b.dup} ya importados)</span>`:"";
+    const canImport=b.count>0;
+    const defaultOn=info.defaultOn!==false; // todos van tildados por defecto, salvo los marcados explícitamente en false (ej. transferencias entre cuentas propias)
+    return `<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2);${canImport?"":"opacity:.55"}">
+      <input type="checkbox" id="bc-bk-${k}" ${defaultOn&&canImport?"checked":""} ${canImport?"":"disabled"}>
+      <span style="flex:1">${info.icon} ${info.label}<div style="font-size:11px;color:var(--text3)">${b.count} ítem(s)${dupNote}</div></span>
+      <strong style="white-space:nowrap">${canImport?curLines:"—"}</strong>
+    </label>`;
+  }).join("");
+  cont.innerHTML=`<div style="font-size:12px;color:var(--text2);margin:10px 0 6px">Elegí qué grupos importar:</div>${rows}
+    <div style="font-size:11px;color:var(--text3);margin-top:8px">El signo (ingreso/gasto) se toma directo de la columna Débito/Crédito del resumen, así que es confiable. Las transferencias hacia tu propio CUIT (entre tus cuentas del banco) se separan solas en su propio grupo y quedan destildadas por defecto para no inflar ingresos/gastos. Lo ya importado antes no se duplica.</div>`;
+  document.getElementById("imp-bc-apply-btn").style.display="";
+}
+function findOrCreateBCRow(yd,bucket){
+  const info=bcBucketInfo(bucket);
+  let row=yd.movRows.find(r=>r.nombre===info.label);
+  if(!row){
+    row={id:Date.now()+Math.floor(Math.random()*1e6),nombre:info.label,txs:Array(12).fill(null).map(()=>[]),valores:Array(12).fill(0),currency:Array(12).fill("ARS")};
+    yd.movRows.push(row);
+  }
+  return row;
+}
+function applyBCImport(){
+  if(!bcRows||!bcRows.length)return;
+  const included=new Set();
+  [...new Set(bcRows.map(p=>p.bucket))].forEach(k=>{
+    const chk=document.getElementById("bc-bk-"+k);
+    if(chk&&chk.checked)included.add(k);
+  });
+  if(!included.size){toast("Elegí al menos un grupo","tundo");return;}
+  const seen=collectImportFpIds();
+  let added=0,skipped=0;const touchedYears=new Set();
+  bcRows.forEach(p=>{
+    if(!included.has(p.bucket))return;
+    if(seen.has(p.fp)){skipped++;return;}
+    const year=p.fecha.getFullYear(),m=p.fecha.getMonth();
+    const yd=yearData(year);
+    if(p.routeDpto){
+      if(!routeAlquilerIncome(yd,p.routeDpto,m,p.monto,p.moneda,p.fp)){skipped++;return;}
+    }else{
+      const row=findOrCreateBCRow(yd,p.bucket);
+      const signed=p.signo<0?-p.monto:p.monto;
+      addTxIn(yd,row.id,m,signed,p.moneda,p.nota,p.fechaISO,"venta",{fpId:p.fp,src:"bancociudad"});
+    }
+    seen.add(p.fp);added++;touchedYears.add(year);
+  });
+  if(added>0){
+    if(!touchedYears.has(state.currentYear)) state.currentYear=[...touchedYears].sort().pop();
+    curTab="mov";
+    snap(`Importar Banco Ciudad (${added} mov.)`);schedSave();render();
+  }
+  toast(`✅ ${added} movimiento(s) importado(s)${skipped?` · ${skipped} ya existían`:""}`,added>0?"tok":"tundo");
+  if(added>0)closeImportBC();
 }
 
 function changeYear(d){
@@ -2333,7 +2701,7 @@ function render(){
           ${acum.map((v,m)=>staticCell(v,m)).join("")}
           <td class="tc ${toc(acum[11],"tb2")}">${fa(acum[11])}</td><td></td></tr>
         </tbody></table></div>
-      <div class="add-row"><input id="nm-inp" placeholder="Nombre del movimiento" onkeydown="if(event.key==='Enter')addMov()"><select id="nm-tipo" class="tx-tipo-sel"><option value="gasto">📉 Gasto</option><option value="ingreso">📈 Ingreso</option></select><button class="btn-add" onclick="addMov()">+ Agregar fila</button><button class="btn-add" style="background:var(--amber)" onclick="addTarjeta()">💳 Agregar tarjeta</button><button class="btn-add" style="background:var(--purple3)" onclick="openImportFiwind()">🪙 Importar Fiwind</button></div>
+      <div class="add-row"><input id="nm-inp" placeholder="Nombre del movimiento" onkeydown="if(event.key==='Enter')addMov()"><select id="nm-tipo" class="tx-tipo-sel"><option value="gasto">📉 Gasto</option><option value="ingreso">📈 Ingreso</option></select><button class="btn-add" onclick="addMov()">+ Agregar fila</button><button class="btn-add" style="background:var(--amber)" onclick="addTarjeta()">💳 Agregar tarjeta</button><button class="btn-add" style="background:var(--purple3)" onclick="openImportFiwind()">🪙 Importar Fiwind</button><button class="btn-add" style="background:#0d4f8b" onclick="openImportBC()">🏦 Importar Banco Ciudad</button><button class="btn-add" style="background:var(--teal)" onclick="openContactos()">👤 Contactos</button></div>
       <p class="hint">La fila <strong>Mi parte alquileres</strong> se calcula automáticamente desde la solapa Alquileres. Podés elegir ARS / USD / USDT por celda. El balance mensual se acumula en Ahorros automáticamente.</p>`;
     scrollToActive();
   }
@@ -3225,7 +3593,7 @@ function cloudPush(){
 function scheduleCloudPush(){clearTimeout(cloudPushTimer);cloudPushTimer=setTimeout(cloudPush,400);}
 
 function makeUserTemplate(){
-  return {currentYear:TODAY_YEAR,fx:{USD:state.fx.USD,USDT:state.fx.USDT},years:{[String(TODAY_YEAR)]:makeYD()},tabOrder:["mov","sav","res"],alqEnabled:false,_ts:Date.now()};
+  return {currentYear:TODAY_YEAR,fx:{USD:state.fx.USD,USDT:state.fx.USDT},years:{[String(TODAY_YEAR)]:makeYD()},tabOrder:["mov","sav","res"],alqEnabled:false,contactos:[],_ts:Date.now()};
 }
 
 function renderAuthToolbar(user){
