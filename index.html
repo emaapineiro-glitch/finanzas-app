@@ -763,6 +763,24 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 2px rgba(124,111,239,.1
     </div>
   </div>
 </div>
+<div class="vmodal-bg" id="imp-fiwind-modal-bg" onclick="if(event.target===this)closeImportFiwind()">
+  <div class="vmodal">
+    <div class="vmodal-handle"></div>
+    <div class="vmodal-title">🪙 Importar movimientos de Fiwind</div>
+    <div class="vmodal-sub">Subí el Excel de "Reporte de actividad" que te manda Fiwind por mail. Se procesa en tu dispositivo, sin subir nada a ningún servidor.</div>
+    <input type="file" id="imp-fiwind-file" accept=".xlsx,.xls" style="display:none" onchange="fiwindFilePicked(event)">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="vbtn ghost" onclick="document.getElementById('imp-fiwind-file').click()">📎 Elegir archivo Excel</button>
+      <span id="imp-fiwind-filename" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <div id="imp-fiwind-status" style="font-size:12px;min-height:18px;margin-bottom:6px"></div>
+    <div id="imp-fiwind-result"></div>
+    <div class="vbtn-row" style="margin-top:14px">
+      <button class="vbtn primary" id="imp-fiwind-apply-btn" onclick="applyFiwindImport()" style="display:none">✅ Importar seleccionados</button>
+      <button class="vbtn ghost" onclick="closeImportFiwind()">Cerrar</button>
+    </div>
+  </div>
+</div>
 <!-- INSTALL BANNER -->
 <div id="install-banner">
   <span>📲 Instalá Finanzas en tu celular</span>
@@ -1363,6 +1381,185 @@ function applyResumen(){
   toast(`✅ ${pagos.length} pago(s) cargados en ${r.nombre}`,"tok");
   closeResumen();
 }
+/* ══ IMPORTAR MOVIMIENTOS DE FIWIND (Excel local, sin IA, sin subir nada) ══
+   El reporte "Actividad" de Fiwind trae columnas: Fecha, Tipo, Monto, Moneda, Monto Origen, Moneda Origen, Precio.
+   Se agrupan por tipo de movimiento en filas "🪙 Fiwind · X" con multi-moneda nativa (igual que el resto de Movimientos). */
+let fiwindRows=null;
+const FIWIND_BUCKET_INFO={
+  ganancias:{label:"🪙 Fiwind · Ganancias",icon:"📈",defaultOn:true},
+  pagos:{label:"🪙 Fiwind · Pagos",icon:"📉",defaultOn:true},
+  retiros:{label:"🪙 Fiwind · Retiros",icon:"📉",defaultOn:true},
+  depositos:{label:"🪙 Fiwind · Depósitos",icon:"📈",defaultOn:true},
+  transferencias:{label:"🪙 Fiwind · Transferencias",icon:"🔁",defaultOn:true},
+  interno:{label:"🪙 Fiwind · Movimientos internos (cuenta propia)",icon:"↔️",defaultOn:false},
+  otros:{label:"🪙 Fiwind · Otros (revisar)",icon:"❓",defaultOn:false}
+};
+function classifyFiwindTipo(tipoRaw){
+  const t=(tipoRaw||"").trim();
+  if(/^Ganancia diaria/i.test(t)) return{bucket:"ganancias",signo:1};
+  if(/^Retiro a una cuenta propia$/i.test(t)) return{bucket:"interno",signo:-1};
+  if(/^Dep[oó]sito de cuenta propia$/i.test(t)) return{bucket:"interno",signo:1};
+  if(/^Retiro\b/i.test(t)) return{bucket:"retiros",signo:-1};
+  if(/^Dep[oó]sito\b/i.test(t)) return{bucket:"depositos",signo:1};
+  if(/^Pago a /i.test(t)) return{bucket:"pagos",signo:-1};
+  if(/^Transferencia a /i.test(t)) return{bucket:"transferencias",signo:-1};
+  if(/^Transferencia de /i.test(t)) return{bucket:"transferencias",signo:1};
+  if(/^Devoluci[oó]n de /i.test(t)) return{bucket:"depositos",signo:1};
+  if(/^Conversi[oó]n$/i.test(t)) return{bucket:"conversion",signo:0,skip:true}; // interno al exchange, no se importa
+  return{bucket:"otros",signo:null,skip:true}; // tipo desconocido: se muestra pero no se puede importar sin signo seguro
+}
+function parseFiwindDate(str){
+  const m=String(str||"").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(!m) return null;
+  const dd=+m[1],mm=+m[2],yyyy=+m[3],hh=+(m[4]||0),mi=+(m[5]||0),ss=+(m[6]||0);
+  const d=new Date(yyyy,mm-1,dd,hh,mi,ss);
+  return isNaN(d.getTime())?null:d;
+}
+function openImportFiwind(){
+  fiwindRows=null;
+  document.getElementById("imp-fiwind-modal-bg").classList.add("open");
+  document.getElementById("imp-fiwind-filename").textContent="";
+  document.getElementById("imp-fiwind-status").textContent="";
+  document.getElementById("imp-fiwind-result").innerHTML="";
+  document.getElementById("imp-fiwind-apply-btn").style.display="none";
+  document.getElementById("imp-fiwind-file").value="";
+}
+function closeImportFiwind(){document.getElementById("imp-fiwind-modal-bg").classList.remove("open");}
+async function fiwindFilePicked(e){
+  const f=e.target.files[0];if(!f)return;
+  document.getElementById("imp-fiwind-filename").textContent="📎 "+f.name;
+  const st=document.getElementById("imp-fiwind-status");
+  st.style.color="var(--text2)";st.textContent="⏳ Leyendo archivo…";
+  document.getElementById("imp-fiwind-result").innerHTML="";
+  document.getElementById("imp-fiwind-apply-btn").style.display="none";
+  try{
+    if(!window.XLSX){ await loadScript("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"); }
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:"array"});
+    const sheet=wb.Sheets["Actividad"]||wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+    const header=(rows[0]||[]).map(h=>String(h||"").trim());
+    const idx={fecha:header.indexOf("Fecha"),tipo:header.indexOf("Tipo"),monto:header.indexOf("Monto"),moneda:header.indexOf("Moneda")};
+    if(idx.fecha<0||idx.tipo<0||idx.monto<0||idx.moneda<0){
+      throw new Error("No reconozco las columnas del archivo. ¿Es el reporte de actividad de Fiwind (hoja \"Actividad\")?");
+    }
+    const parsed=[];
+    for(let i=1;i<rows.length;i++){
+      const row=rows[i];if(!row||row.length===0)continue;
+      const tipoRaw=String(row[idx.tipo]||"").trim();if(!tipoRaw)continue;
+      const fecha=parseFiwindDate(row[idx.fecha]);
+      const monto=Math.abs(Number(row[idx.monto])||0);
+      const moneda=String(row[idx.moneda]||"ARS").trim().toUpperCase();
+      if(!fecha||!monto)continue;
+      const cl=classifyFiwindTipo(tipoRaw);
+      const fechaISO=fecha.toISOString();
+      parsed.push({fecha,fechaISO,tipoRaw,monto,moneda,bucket:cl.bucket,signo:cl.signo,skip:!!cl.skip,
+        fp:fechaISO+"|"+tipoRaw+"|"+monto+"|"+moneda});
+    }
+    if(!parsed.length) throw new Error("No encontré filas de movimientos en el archivo.");
+    fiwindRows=parsed;
+    renderFiwindPreview(summarizeFiwind(parsed));
+    st.textContent="";
+  }catch(err){
+    st.style.color="var(--coral2)";st.textContent="❌ "+err.message;
+  }
+}
+function collectFiwindFpIds(){
+  const seen=new Set();
+  Object.values(state.years||{}).forEach(yd=>{
+    (yd.movRows||[]).forEach(r=>{
+      (r.txs||[]).forEach(arr=>{ (arr||[]).forEach(t=>{ if(t.fpId) seen.add(t.fpId); }); });
+    });
+  });
+  return seen;
+}
+function summarizeFiwind(parsed){
+  const seen=collectFiwindFpIds();
+  const buckets={};
+  parsed.forEach(p=>{
+    if(p.bucket==="conversion")return; // internas al exchange, no se listan ni se importan
+    if(!buckets[p.bucket])buckets[p.bucket]={count:0,dup:0,byCur:{},importable:!p.skip};
+    const b=buckets[p.bucket];
+    if(seen.has(p.fp)){b.dup++;return;}
+    b.count++;
+    b.byCur[p.moneda]=(b.byCur[p.moneda]||0)+(p.signo<0?-p.monto:p.monto);
+  });
+  return buckets;
+}
+function renderFiwindPreview(buckets){
+  const cont=document.getElementById("imp-fiwind-result");
+  const keys=Object.keys(buckets);
+  if(!keys.length){cont.innerHTML=`<div style="color:var(--coral2);font-size:13px;margin-top:8px">No se detectaron movimientos importables en el archivo.</div>`;document.getElementById("imp-fiwind-apply-btn").style.display="none";return;}
+  const rows=keys.map(k=>{
+    const info=FIWIND_BUCKET_INFO[k]||{label:k,icon:"•",defaultOn:false};
+    const b=buckets[k];
+    const curLines=Object.entries(b.byCur).map(([c,v])=>fmt(v,c)).join(" · ")||"—";
+    const dupNote=b.dup?`<span style="color:var(--text3)"> (+${b.dup} ya importados)</span>`:"";
+    const canImport=b.importable&&b.count>0;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2);${canImport?"":"opacity:.55"}">
+      <input type="checkbox" id="fw-bk-${k}" ${info.defaultOn&&canImport?"checked":""} ${canImport?"":"disabled"}>
+      <span style="flex:1">${info.icon} ${info.label}<div style="font-size:11px;color:var(--text3)">${b.count} ítem(s)${dupNote}</div></span>
+      <strong style="white-space:nowrap">${canImport?curLines:"solo revisión"}</strong>
+    </label>`;
+  }).join("");
+  cont.innerHTML=`<div style="font-size:12px;color:var(--text2);margin:10px 0 6px">Elegí qué grupos importar (podés tildar/destildar):</div>${rows}
+    <div style="font-size:11px;color:var(--text3);margin-top:8px">Las "Conversiones" no se importan (son canjes internos entre monedas). Lo que ya hayas importado antes se detecta solo y no se duplica.</div>`;
+  document.getElementById("imp-fiwind-apply-btn").style.display="";
+}
+function yearData(y){
+  const k=String(y);
+  if(!state.years[k])state.years[k]=makeYD();
+  return state.years[k];
+}
+function addTxIn(yd,rowId,m,monto,currency,nota,fecha,rate,extra){
+  const r=yd.movRows.find(x=>x.id==rowId);if(!r)return;
+  if(!r.txs)r.txs=Array(12).fill(null).map(()=>[]);
+  if(!r.txs[m])r.txs[m]=[];
+  const cur=currency||r.currency?.[m]||"ARS";
+  const tx={id:Date.now()+Math.floor(Math.random()*1e6),monto:Number(monto),currency:cur,rate:cur==="ARS"?undefined:(rate||"venta"),nota:nota||"",fecha:fecha||new Date().toISOString()};
+  if(extra)Object.assign(tx,extra);
+  r.txs[m].push(tx);
+  if(!r.valores)r.valores=Array(12).fill(0);
+  r.valores[m]=r.txs[m].reduce((a,t)=>a+txARS(t,cur),0);
+}
+function findOrCreateFiwindRow(yd,bucket){
+  const info=FIWIND_BUCKET_INFO[bucket]||{label:"🪙 Fiwind · Otros"};
+  let row=yd.movRows.find(r=>r.nombre===info.label);
+  if(!row){
+    row={id:Date.now()+Math.floor(Math.random()*1e6),nombre:info.label,txs:Array(12).fill(null).map(()=>[]),valores:Array(12).fill(0),currency:Array(12).fill("ARS")};
+    yd.movRows.push(row);
+  }
+  return row;
+}
+function applyFiwindImport(){
+  if(!fiwindRows||!fiwindRows.length)return;
+  const included=new Set();
+  Object.keys(FIWIND_BUCKET_INFO).forEach(k=>{
+    const chk=document.getElementById("fw-bk-"+k);
+    if(chk&&chk.checked)included.add(k);
+  });
+  if(!included.size){toast("Elegí al menos un grupo","tundo");return;}
+  const seen=collectFiwindFpIds();
+  let added=0,skipped=0;const touchedYears=new Set();
+  fiwindRows.forEach(p=>{
+    if(p.skip||!included.has(p.bucket))return;
+    if(seen.has(p.fp)){skipped++;return;}
+    const year=p.fecha.getFullYear(),m=p.fecha.getMonth();
+    const yd=yearData(year);
+    const row=findOrCreateFiwindRow(yd,p.bucket);
+    const signed=p.signo<0?-p.monto:p.monto;
+    addTxIn(yd,row.id,m,signed,p.moneda,p.tipoRaw,p.fechaISO,"venta",{fpId:p.fp,src:"fiwind"});
+    seen.add(p.fp);added++;touchedYears.add(year);
+  });
+  if(added>0){
+    if(!touchedYears.has(state.currentYear)) state.currentYear=[...touchedYears].sort().pop();
+    curTab="mov";
+    snap(`Importar Fiwind (${added} mov.)`);schedSave();render();
+  }
+  toast(`✅ ${added} movimiento(s) importado(s)${skipped?` · ${skipped} ya existían`:""}`,added>0?"tok":"tundo");
+  if(added>0)closeImportFiwind();
+}
+
 function changeYear(d){
   state.currentYear+=d;
   const k=String(state.currentYear);if(!state.years[k])state.years[k]=makeYD();
@@ -2136,7 +2333,7 @@ function render(){
           ${acum.map((v,m)=>staticCell(v,m)).join("")}
           <td class="tc ${toc(acum[11],"tb2")}">${fa(acum[11])}</td><td></td></tr>
         </tbody></table></div>
-      <div class="add-row"><input id="nm-inp" placeholder="Nombre del movimiento" onkeydown="if(event.key==='Enter')addMov()"><select id="nm-tipo" class="tx-tipo-sel"><option value="gasto">📉 Gasto</option><option value="ingreso">📈 Ingreso</option></select><button class="btn-add" onclick="addMov()">+ Agregar fila</button><button class="btn-add" style="background:var(--amber)" onclick="addTarjeta()">💳 Agregar tarjeta</button></div>
+      <div class="add-row"><input id="nm-inp" placeholder="Nombre del movimiento" onkeydown="if(event.key==='Enter')addMov()"><select id="nm-tipo" class="tx-tipo-sel"><option value="gasto">📉 Gasto</option><option value="ingreso">📈 Ingreso</option></select><button class="btn-add" onclick="addMov()">+ Agregar fila</button><button class="btn-add" style="background:var(--amber)" onclick="addTarjeta()">💳 Agregar tarjeta</button><button class="btn-add" style="background:var(--purple3)" onclick="openImportFiwind()">🪙 Importar Fiwind</button></div>
       <p class="hint">La fila <strong>Mi parte alquileres</strong> se calcula automáticamente desde la solapa Alquileres. Podés elegir ARS / USD / USDT por celda. El balance mensual se acumula en Ahorros automáticamente.</p>`;
     scrollToActive();
   }
